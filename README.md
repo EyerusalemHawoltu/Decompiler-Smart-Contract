@@ -22,6 +22,13 @@ pip install -r requirements.txt
 
 If encounter compatability issue during packages installation, downgrade vllm.
 
+Or use a docker image:
+```bash
+docker pull jiang719/nova
+
+docker run --gpus all -it jiang719/nova
+```
+
 ## File Structure
 * `baseline`: code for the baseline approach, standard fine-tuning on assembly code
     * `dataset.py`: Dataset class, used during training

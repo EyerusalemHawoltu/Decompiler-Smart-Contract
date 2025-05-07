@@ -17,7 +17,7 @@ RUN echo 'syntax on\nset tabstop=2\nset softtabstop=2\nset showcmd\nset showmatc
 # Install packages
 RUN conda install -y python=3.10
 RUN conda install -y nvidia::cuda-nvcc
-RUN pip install torch==2.3.1 clang==12.0.1 datasets==2.20.0 huggingface-hub==0.24.2 matplotlib==3.9.1 openai==1.37.1 transformers==4.40.2 vllm accelerate==0.33.0 deepspeed==0.14.4 
+RUN pip install torch==2.3.0 clang==12.0.1 datasets==2.20.0 huggingface-hub==0.24.2 matplotlib==3.9.1 openai==1.37.1 transformers==4.40.2 vllm==0.5 accelerate==0.33.0 deepspeed==0.14.4 
 
 
 # Copy git repo
