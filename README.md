@@ -30,50 +30,53 @@ docker run --gpus all -it jiang719/nova
 ```
 
 ## File Structure
-* `baseline`: code for the baseline approach, standard fine-tuning on assembly code
-    * `dataset.py`: Dataset class, used during training
-    * `evaluate.py`: evaluate binary code recovery task
-    * `finetune_bcr.py`: fine-tune trained Nova model for binary code recovery task
-    * `finetune_sim.py`: fine-tune trained Nova model for binary code similarity detection task
-    * `inference_bcr.py`: infer the fine-tuned model on the HumanEval-Decompile benchmark
-    * `inference_sim.py`: infer the fine-tuned model on the CodeArt's evaluation set
-    * `prepare_bcr_dataset.py`: prepare and tokenize the data for fine-tuning binary code recovery
-    * `prepare_sim_dataset.py`: prepare and tokenize the data for fine-tuning binary code similarity
-    * `prepare_contra_dataset.py`: prepare and tokenize the data for contrastive learning training
-    * `prepare_lm_dataset.py`: prepare and tokenize the data for language modeling training (next token prediction)
-    * `train_lm_contra.py`: train the model together with language modeling and contrastive learning (using DeepSpeed)
-    * `train_lm.py`: train the model with language modeling (using HuggingFace Trainer)
+* `baseline`: code for the baseline pre-traininng, and fine-tuning on assembly code
+    * Data Pre-processing
+        * `prepare_lm_dataset.py`: prepare and tokenize the data for *language modeling training (next token prediction)*
+        * `prepare_contra_dataset.py`: prepare and tokenize the data for *contrastive learning training*
+        * `prepare_bcr_dataset.py`: prepare and tokenize the data for *fine-tuning* binary code recovery
+        * `prepare_sim_dataset.py`: prepare and tokenize the data for *fine-tuning* binary code similarity detection
+
+    * Pre-training and Fine-tuning
+        * `dataset.py`: Dataset class, used during pre-training and fine-tuning
+        * `train_lm.py`: pre-train the model with language modeling (using HuggingFace Trainer)
+        * `train_lm_contra.py`: pre-train the model together with language modeling and contrastive learning (using DeepSpeed)
+        * `finetune_bcr.py`: fine-tune trained model for binary code recovery task
+        * `finetune_sim.py`: fine-tune trained model for binary code similarity detection task
+    * Inference and Evaluation
+        * `inference_bcr.py`: infer the fine-tuned model on the HumanEval-Decompile benchmark, for the binary code recovery task.
+        * `inference_sim.py`: infer the fine-tuned model on the CodeArt's evaluation set, for the binary code similarity detection
+        * `evaluate.py`: evaluate binary code recovery task
+* `nova`: code for Nova pre-training and fine-tuning
+    * Nova Model Architecture
+        * `modeling_nova.py`: the code for Nova's model class, extended from Llama
+        * `generation_utils.py`: the code for Nova's specialized inference, used by Nova's model class
+    * The rest code for data pre-processing, pre-training and fine-tuning are structured in similar ways as the baseline approach.
 * `benchmark`: test data and results for HumanEval-Decompile
 * `data`: folder to save the processed data
 * `data-tokenize`: folder to save the tokenized dataset
-* `nova`: code for Nova
-    * `dataset.py`: the code for the Dataset class, used during training
-    * `generation_utils.py`: the code for Nova's specialized inference, used by Nova's model class
-    * `modeling_nova.py`: the code for Nova's model class, extended from Llama
-    * `inference_bcr.py`: the code to run Nova on the HumanEval-Decompile benchmark
-    * `evaluate.py`: evaluate binary code recovery task
 
 
 ## Train
 
 ### Step 1: Obtain Assembly Code for Training Data
 
-Training use data from two sources: Anghabench and The-Stack
+Training use data from two sources: *Anghabench* and *The-Stack*
 
-For Anghabench dataset, download the dataset from https://github.com/brenocfg/AnghaBench, and run the following command to prepare `n` data instances:
+For *Anghabench* dataset, download the dataset from https://github.com/brenocfg/AnghaBench, and run the following command to prepare `n` data instances (use the whole Anghabench if `n` is not provided, 1 million in total):
 
 ```bash
 cd data
-python compile_anghabench.py --root <patch to AnghaBench> --output anghabench/anghabench.jsonl --n 100
+python compile_anghabench.py --root {patch_to_downloaded_AnghaBench} --output anghabench/anghabench.jsonl --n 100
 ```
 
 The data will be saved at `data/anghabench/anghabench.jsonl`
 
-For The-Stack dataset, run the following command:
+For *The-Stack* dataset, run the following command to download `n` C files from `bigcode/the-stack-dedup`, and compile the files to obtain Assembly functions (the-stack is huge, the paper only downloads 50K files due to computation resource limits):
 
 ```bash
 cd data
-python compile_the_stack.py
+python compile_the_stack.py --output the-stack/the-stack.jsonl -n 200
 ```
 
 The data will be saved at `data/the-stack/the-stack.jsonl`
@@ -84,56 +87,92 @@ Normalize the data (according to description in the paper), by running the follo
 
 ```bash
 cd data
-python normalize.py
+python normalize.py --dataset {anghabench|the-stack|codeart|binarycorp}
 ```
+
+* binary code recovery: for pre-training and model and fine-tuning for binary code recovery, you need to normalize the anghabench and the-stack.
+* binary code similarity detection: for fine-tuning and testing the model for bianry code similarity detection, you need to normalize the bianrycorp and codeart. You first need to download the [binarycorp dataset](https://zenodo.org/records/18072785?token=eyJhbGciOiJIUzUxMiJ9.eyJpZCI6IjEwMGQ0NzEyLTU4NmUtNDI4MS1iNjI5LTRhODA3ZTQzNzRiMiIsImRhdGEiOnt9LCJyYW5kb20iOiIyMTM1YzU3MDRkMGFhZjE5MTgwNzYxMmYyZmM3YTBkOCJ9.WUvC4Ecwa_tM2Eio9ift8AuJ1PgnA2bJ9HXgxHstKEPfvO3fdMb5OgN_Vry2HfECtpe82PqZLNKDj1HkqSJM8g), and set the folder path in the script. You can skip this part if you only want to use the model for binary code recovery.
 
 ### Step 3: Tokenize Data
 
 Before training the model, the data need to be tokenized and save to HuggingFace Dataset format:
 
+* tokenize the pre-training data
 ```bash
-cd baseline
-python prepare_lm_dataset.py
-python prepare_contra_dataset.py
+# enter baseline folder for training the baseline model, or enter nova folder for training the nova model
+cd nova
+python prepare_lm_dataset.py        # build the dataset for language modeling
+python prepare_contra_dataset.py    # build the dataset for contrastive learning
 ```
 
-### Step 4: Training
-
-First train the model with the language modeling objective, by running the following command:
-
+* tokenize the fine-tuning data
 ```bash
-cd baseline
-python train_lm.py
+cd nova
+python prepare_bcr_dataset.py       # build the dataset for binary code recovery fine-tuning
+python prepare_sim_dataset.py       # build the dataset or similarity detection fine-tuning
+```
+
+### Step 4: Pre-Training
+
+The pre-training contains two steps
+
+1. First train the model with the language modeling objective, by running the following command:
+```bash
+# this uses Transformers library's Trainer (run with 4 GPUs in this example)
+torchrun --nproc-per-node=4 train_lm.py
+```
+
+You will need to set the `model_save_folder` path in the code.
+
+2. Then start from the trained model from the above step, further train it together with language modeling and contrastive learning, by running the following command:
+```bash
+# this uses DeepSpeed (run with 4 GPUs in this example)
+deepspeed --num_gpus=4 train_lm_contra.py
 ```
 
 You will need to set the `model_load_folder` and `model_save_folder` path in the code.
 
-Then start from the trained model from the above step, further train it together with language modeling and contrastive learning, by running the following command:
+### Step 5: Fine-Tuning for Downstream Tasks
 
+* binary code recovery:
 ```bash
-cd baseline
-python train_lm_contra.py
+# this uses Transformers library's Trainer (run with 4 GPUs in this example)
+torchrun --nproc-per-node=4 finetune_bcr.py
 ```
 
-For training the Nova model, running the corresponding code in the `nova` folder.
+You will need to set the `model_load_folder` and `model_save_folder` path in the code.
 
-## Usage
-
+* binary code similarity detection:
 ```bash
-cd nova
+# this uses DeepSpeed (run with 4 GPUs in this example)
+deepspeed --num_gpus=4 finetune_sim.py
+```
+
+You will need to set the `model_load_folder` and `model_save_folder` path in the code.
+
+## Evaluation
+
+Before inference, you may need to convert the DeepSpeed checkpoints to HuggingFace's style: use `zero_to_hf_ckpt.py` if the DeepSpeed config uses Zero1 or Zero2, use DeepSpeed's official script if it uses Zero3 optimization.
+
+* To evaluate on HumanEval-Decompile, which tests the binary code recovery ability:
+```bash
 python inference_bcr.py
 python evaluate.py
 ```
 
+* To evaluate on CodeArt's test set, which tests the binary code similarity detection ability:
+```bash
+python inference_sim.py
+```
+The evaluation uses the code in [CodeArt's repository](https://github.com/ziansu/codeart)
+
+
 ## Citation
 ```
-@misc{jiang2024nova,
-      title={Nova: Generative Language Models for Assembly Code with Hierarchical Attention and Contrastive Learning}, 
-      author={Nan Jiang and Chengxiao Wang and Kevin Liu and Xiangzhe Xu and Lin Tan and Xiangyu Zhang},
-      year={2024},
-      eprint={2311.13721},
-      archivePrefix={arXiv},
-      primaryClass={cs.SE},
-      url={https://arxiv.org/abs/2311.13721}, 
+@inproceedings{jiang2025nova,
+    title={Nova: Generative Language Models for Assembly Code with Hierarchical Attention and Contrastive Learning},
+    author={Nan Jiang and Chengxiao Wang and Kevin Liu and Xiangzhe Xu and Lin Tan and Xiangyu Zhang and Petr Babkin},
+    booktitle={The Thirteenth International Conference on Learning Representations},
+    year={2025}
 }
 ```

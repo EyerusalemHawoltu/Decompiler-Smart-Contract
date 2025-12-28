@@ -9,7 +9,7 @@
         "max_split_size_mb": 512
     },
     "zero_optimization": {
-        "stage": 3
+        "stage": 2
     },
     "zero_force_ds_cpu_optimizer": false,
     "zero_allow_untested_optimizer": true,

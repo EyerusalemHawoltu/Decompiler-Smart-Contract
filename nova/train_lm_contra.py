@@ -17,8 +17,8 @@ world_size = int(os.getenv("WORLD_SIZE", "1"))
 torch.cuda.set_device(local_rank)
 deepspeed.init_distributed()
 
-model_load_folder = ''
-model_save_folder = ''
+model_load_folder = '{path_to_model_after_train_lm.py}'
+model_save_folder = '{path_to_save_model}'
 
 
 ds_config = json.load(open('ds_config.json', 'r'))

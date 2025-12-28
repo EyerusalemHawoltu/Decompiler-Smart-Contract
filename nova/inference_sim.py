@@ -7,7 +7,7 @@ from modeling_nova import NovaTokenizer, NovaForCausalLM
 
 
 def inference_codeart():
-    tokenizer = AutoTokenizer.from_pretrained('deepseek-ai/deepseek-coder-6.7b-base', trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained('deepseek-ai/deepseek-coder-1.3b-base', trust_remote_code=True)
     tokenizer.add_tokens(['<unk>', '<cls>'] + [f'<label-{i}>' for i in range(1, 257)], special_tokens=True)
     if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
         print('Vocabulary:', len(tokenizer.get_vocab()))

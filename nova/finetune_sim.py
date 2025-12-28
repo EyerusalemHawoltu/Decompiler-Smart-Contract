@@ -16,8 +16,8 @@ world_size = int(os.getenv("WORLD_SIZE", "1"))
 torch.cuda.set_device(local_rank)
 deepspeed.init_distributed()
 
-model_load_folder = ''
-model_save_folder = ''
+model_load_folder = '{path_to_model_after_training}'
+model_save_folder = '{path_to_save_model}'
 
 
 ds_config = json.load(open('ds_config.json', 'r'))
@@ -61,7 +61,7 @@ if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
 start_time = time.time()
 train_loss = []
 engine.module.train()
-for epoch in range(2):
+for epoch in range(1):
     for i, data in enumerate(train_dataloader):
         O0_input_ids = data['O0_input_ids'].to(engine.device)
         O3_input_ids = data['O3_input_ids'].to(engine.device)
@@ -103,4 +103,4 @@ for epoch in range(2):
 
     engine.save_checkpoint(model_save_folder)
     if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
-        print('chackpoint saved')
+        print('checkpoint saved')

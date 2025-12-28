@@ -1,13 +1,14 @@
 import re
 import os
 import json
+import argparse
 import subprocess
 from datasets import load_dataset
 
-from utils import remove_empty_lines, remove_c_comments, find_functions, filter_self_contained_func
+from utils import remove_c_comments, find_functions, filter_self_contained_func
 
 
-def download_the_stack():
+def download_the_stack(max_count=200):
     ds = load_dataset("bigcode/the-stack-dedup", streaming=True, split="train", data_dir="data/c")
     cnt = 0
     for idx, sample in enumerate(iter(ds)):
@@ -18,11 +19,11 @@ def download_the_stack():
 
         cnt += 1
         # download 200 files for a simple test
-        if cnt == 200:
+        if cnt >= max_count:
             break
 
 
-def compile_the_stack():
+def compile_the_stack(output_file):
     result = []
     OPT = ["O0", "O1", "O2", "O3"]
     L = os.listdir('the-stack/c/')
@@ -82,15 +83,31 @@ def compile_the_stack():
                 'input': temp[func]['src'],
                 'output': {'opt-state-' + opt: temp[func]['opt-state-' + opt] for opt in OPT if 'opt-state-' + opt in temp[func]}
             })
-    with open('the-stack/the-stack.jsonl', 'w') as wp:
+    with open(output_file, 'w') as wp:
         for line in result:
             wp.write(json.dumps(line) + '\n')
 
 
-if __name__ == '__main__':
-    download_the_stack()
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Compile C files and generate JSONL output."
+    )
+    parser.add_argument("--output", default="the-stack/the-stack.jsonl", help="Path to JSONL output file.")
+    parser.add_argument("--n", type=int, default=None, help="Number of files to compile")
+    args = parser.parse_args()
+    return args
 
-    compile_the_stack()
+
+def main():
+    args = parse_args()
+    output_file = args.output
+
+    download_the_stack(max_count=args.n)
+    compile_the_stack(output_file=output_file)
 
     # optional if need less and easier data
-    # filter_self_contained_func('the-stack/the-stack.jsonl')
+    # filter_self_contained_func(output_file)
+
+
+if __name__ == '__main__':
+    main()

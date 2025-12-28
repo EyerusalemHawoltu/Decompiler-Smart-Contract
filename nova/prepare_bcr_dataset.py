@@ -5,6 +5,7 @@ from datasets import Dataset, DatasetDict
 from transformers import AutoTokenizer
 from modeling_nova import NovaTokenizer
 
+# Requite clang or llvm installation
 import clang.cindex
 clang.cindex.Config.set_library_file('/usr/lib/llvm-12/lib/libclang-12.so.1')
 

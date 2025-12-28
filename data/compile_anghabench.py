@@ -119,7 +119,7 @@ def parse_args():
         required=True,
         help="Root directory where AnghaBench files are located.",
     )
-    parser.add_argument("--output", required=True, help="Path to JSONL output file.")
+    parser.add_argument("--output", default="anghabench/anghabench.jsonl", help="Path to JSONL output file.")
     parser.add_argument("--n", type=int, default=None, help="Number of files to compile")
     args = parser.parse_args()
     return args
@@ -128,7 +128,7 @@ def parse_args():
 def main():
     args = parse_args()
     root = args.root
-    jsonl_output_file = args.output
+    output_file = args.output
     count = args.n
     
     if count:
@@ -139,7 +139,7 @@ def main():
     with multiprocessing.Pool(32) as pool:
         from functools import partial
 
-        compile_write_func = partial(compile_and_write, output_file=jsonl_output_file)
+        compile_write_func = partial(compile_and_write, output_file=output_file)
         pool.map(compile_write_func, files)
 
 

@@ -12,7 +12,7 @@ accelerator = Accelerator(kwargs_handlers=[kwargs])
 torch.manual_seed(7)
 
 model_load_folder = 'deepseek-ai/deepseek-coder-1.3b-base'
-model_save_folder = ''
+model_save_folder = '{path_to_save_model}'
 
 
 tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/deepseek-coder-1.3b-base", trust_remote_code=True)

@@ -150,15 +150,34 @@ def normalize_binarycorp(binary_corp_folder):
     json.dump(data_filter, open('binarycorp/binarycorp.json', 'w'), indent=2)
 
 
+def parse_args():
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Normalize assembly code in datasets."
+    )
+    parser.add_argument(
+        "--dataset",
+        choices=["anghabench", "the-stack", "codeart", "binarycorp"],
+        required=True,
+        help="Specify which dataset to normalize."
+    )
+
+    return parser.parse_args()
+
+
 if __name__ == '__main__':
-    # training data
-    normalize_the_stack()
-    normalize_anghabench()
+    args = parse_args()
+    dataset = args.dataset
 
-    # fine-tuning data
-    # download BinaryCorp small_train.tar from https://cloud.vul337.team:8443/s/cxnH8DfZTADLKCs
-    # binary_corp_folder = ''
-    # normalize_binarycorp(binary_corp_folder)
-
-    # evaluation data
-    # normalize_codeart()
+    if dataset == "the-stack":
+        normalize_the_stack()
+    elif dataset == "anghabench":
+        normalize_anghabench()
+    elif dataset == "binarycorp":
+        binary_corp_folder = '{path_to_binarycorp}'
+        normalize_binarycorp(binary_corp_folder)
+    elif dataset == "codeart":
+        normalize_codeart()
+    else:
+        raise ValueError(f"Dataset {dataset} is not supported.")
