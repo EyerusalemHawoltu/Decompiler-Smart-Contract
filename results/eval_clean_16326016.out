@@ -1,0 +1,178 @@
+JOB START
+Tue Jun 16 13:28:37 +04 2026
+cn270
+Checkpoint: /scratch/eh3115/Decompliler/Decompliler/checkpoints/nova-solidity-1.3b-clean/checkpoint-1467
+[eval] loading test set from /scratch/eh3115/Decompliler/Decompliler/data-tokenized/test_set.json
+[eval] 5214 test samples
+[eval] 5214 remaining
+[eval] device = cuda
+[eval] loading model from /scratch/eh3115/Decompliler/Decompliler/checkpoints/nova-solidity-1.3b-clean/checkpoint-1467
+[eval] model ready
+  [1/5214] bleu4=0.849 em=0 sample=1.7s ETA=2.4h
+  [50/5214] bleu4=0.000 em=0 sample=4.0s ETA=2.1h
+  [100/5214] bleu4=0.000 em=0 sample=0.6s ETA=2.2h
+  [checkpoint] saved 100 results
+  [150/5214] bleu4=0.535 em=0 sample=0.7s ETA=2.5h
+  [200/5214] bleu4=0.483 em=0 sample=0.6s ETA=2.4h
+  [checkpoint] saved 200 results
+  [250/5214] bleu4=0.392 em=0 sample=0.8s ETA=2.4h
+  [300/5214] bleu4=0.204 em=0 sample=1.2s ETA=2.6h
+  [checkpoint] saved 300 results
+  [350/5214] bleu4=0.000 em=0 sample=1.1s ETA=2.5h
+  [400/5214] bleu4=0.000 em=0 sample=0.7s ETA=2.5h
+  [checkpoint] saved 400 results
+  [450/5214] bleu4=0.000 em=0 sample=0.8s ETA=2.5h
+  [500/5214] bleu4=0.000 em=0 sample=1.4s ETA=2.4h
+  [checkpoint] saved 500 results
+  [550/5214] bleu4=0.000 em=0 sample=1.7s ETA=2.5h
+  [600/5214] bleu4=0.000 em=0 sample=0.9s ETA=2.5h
+  [checkpoint] saved 600 results
+  [650/5214] bleu4=0.000 em=0 sample=0.9s ETA=2.4h
+  [700/5214] bleu4=0.000 em=0 sample=1.0s ETA=2.4h
+  [checkpoint] saved 700 results
+  [750/5214] bleu4=0.381 em=0 sample=4.0s ETA=2.4h
+  [800/5214] bleu4=0.000 em=0 sample=0.9s ETA=2.4h
+  [checkpoint] saved 800 results
+  [850/5214] bleu4=0.000 em=0 sample=1.0s ETA=2.4h
+  [900/5214] bleu4=0.088 em=0 sample=0.8s ETA=2.3h
+  [checkpoint] saved 900 results
+  [950/5214] bleu4=0.000 em=0 sample=3.7s ETA=2.3h
+  [1000/5214] bleu4=0.849 em=0 sample=1.0s ETA=2.2h
+  [checkpoint] saved 1000 results
+  [1050/5214] bleu4=0.000 em=0 sample=2.7s ETA=2.2h
+  [1100/5214] bleu4=0.535 em=0 sample=0.9s ETA=2.2h
+  [checkpoint] saved 1100 results
+  [1150/5214] bleu4=0.000 em=0 sample=1.2s ETA=2.2h
+  [1200/5214] bleu4=0.401 em=0 sample=1.0s ETA=2.2h
+  [checkpoint] saved 1200 results
+  [1250/5214] bleu4=0.000 em=0 sample=0.4s ETA=2.1h
+  [1300/5214] bleu4=0.689 em=0 sample=3.4s ETA=2.1h
+  [checkpoint] saved 1300 results
+  [1350/5214] bleu4=0.189 em=0 sample=1.6s ETA=2.1h
+  [1400/5214] bleu4=0.000 em=0 sample=0.9s ETA=2.0h
+  [checkpoint] saved 1400 results
+  [1450/5214] bleu4=0.000 em=0 sample=0.8s ETA=2.0h
+  [1500/5214] bleu4=0.000 em=0 sample=0.6s ETA=2.0h
+  [checkpoint] saved 1500 results
+  [1550/5214] bleu4=0.658 em=0 sample=0.8s ETA=2.0h
+  [1600/5214] bleu4=0.000 em=0 sample=1.0s ETA=1.9h
+  [checkpoint] saved 1600 results
+  [1650/5214] bleu4=0.467 em=0 sample=0.9s ETA=1.9h
+  [1700/5214] bleu4=0.000 em=0 sample=0.6s ETA=1.9h
+  [checkpoint] saved 1700 results
+  [1750/5214] bleu4=0.203 em=0 sample=2.3s ETA=1.8h
+  [1800/5214] bleu4=0.000 em=0 sample=1.2s ETA=1.8h
+  [checkpoint] saved 1800 results
+  [1850/5214] bleu4=0.000 em=0 sample=0.7s ETA=1.8h
+  [1900/5214] bleu4=0.000 em=0 sample=0.6s ETA=1.8h
+  [checkpoint] saved 1900 results
+  [1950/5214] bleu4=0.000 em=0 sample=4.8s ETA=1.7h
+  [2000/5214] bleu4=0.000 em=0 sample=2.6s ETA=1.7h
+  [checkpoint] saved 2000 results
+  [2050/5214] bleu4=0.063 em=0 sample=0.5s ETA=1.7h
+  [2100/5214] bleu4=0.000 em=0 sample=0.7s ETA=1.6h
+  [checkpoint] saved 2100 results
+  [2150/5214] bleu4=0.467 em=0 sample=0.6s ETA=1.6h
+  [2200/5214] bleu4=0.743 em=0 sample=3.4s ETA=1.6h
+  [checkpoint] saved 2200 results
+  [2250/5214] bleu4=0.014 em=0 sample=0.9s ETA=1.6h
+  [2300/5214] bleu4=0.439 em=0 sample=1.8s ETA=1.5h
+  [checkpoint] saved 2300 results
+  [2350/5214] bleu4=0.421 em=0 sample=2.2s ETA=1.5h
+  [2400/5214] bleu4=0.000 em=0 sample=1.1s ETA=1.5h
+  [checkpoint] saved 2400 results
+  [2450/5214] bleu4=0.502 em=0 sample=2.4s ETA=1.4h
+  [2500/5214] bleu4=0.165 em=0 sample=0.7s ETA=1.4h
+  [checkpoint] saved 2500 results
+  [2550/5214] bleu4=0.000 em=0 sample=4.8s ETA=1.4h
+  [2600/5214] bleu4=0.025 em=0 sample=1.1s ETA=1.4h
+  [checkpoint] saved 2600 results
+  [2650/5214] bleu4=0.000 em=0 sample=1.8s ETA=1.4h
+  [2700/5214] bleu4=0.147 em=0 sample=1.7s ETA=1.3h
+  [checkpoint] saved 2700 results
+  [2750/5214] bleu4=0.000 em=0 sample=2.1s ETA=1.3h
+  [2800/5214] bleu4=0.000 em=0 sample=1.8s ETA=1.3h
+  [checkpoint] saved 2800 results
+  [2850/5214] bleu4=0.198 em=0 sample=13.6s ETA=1.3h
+  [2900/5214] bleu4=0.761 em=0 sample=3.4s ETA=1.2h
+  [checkpoint] saved 2900 results
+  [2950/5214] bleu4=0.325 em=0 sample=2.0s ETA=1.2h
+  [3000/5214] bleu4=0.000 em=0 sample=0.9s ETA=1.2h
+  [checkpoint] saved 3000 results
+  [3050/5214] bleu4=0.237 em=0 sample=2.0s ETA=1.2h
+  [3100/5214] bleu4=0.000 em=0 sample=0.5s ETA=1.1h
+  [checkpoint] saved 3100 results
+  [3150/5214] bleu4=0.000 em=0 sample=1.5s ETA=1.1h
+  [3200/5214] bleu4=0.509 em=0 sample=1.2s ETA=1.1h
+  [checkpoint] saved 3200 results
+  [3250/5214] bleu4=0.000 em=0 sample=1.5s ETA=1.1h
+  [3300/5214] bleu4=0.000 em=0 sample=0.7s ETA=1.0h
+  [checkpoint] saved 3300 results
+  [3350/5214] bleu4=0.000 em=0 sample=1.9s ETA=1.0h
+  [3400/5214] bleu4=0.400 em=0 sample=0.8s ETA=1.0h
+  [checkpoint] saved 3400 results
+  [3450/5214] bleu4=0.000 em=0 sample=4.8s ETA=0.9h
+  [3500/5214] bleu4=0.456 em=0 sample=1.9s ETA=0.9h
+  [checkpoint] saved 3500 results
+  [3550/5214] bleu4=0.000 em=0 sample=0.8s ETA=0.9h
+  [3600/5214] bleu4=0.601 em=0 sample=3.4s ETA=0.9h
+  [checkpoint] saved 3600 results
+  [3650/5214] bleu4=0.000 em=0 sample=0.7s ETA=0.8h
+  [3700/5214] bleu4=0.000 em=0 sample=2.6s ETA=0.8h
+  [checkpoint] saved 3700 results
+  [3750/5214] bleu4=0.212 em=0 sample=2.2s ETA=0.8h
+  [3800/5214] bleu4=0.000 em=0 sample=3.0s ETA=0.8h
+  [checkpoint] saved 3800 results
+  [3850/5214] bleu4=0.000 em=0 sample=3.0s ETA=0.7h
+  [3900/5214] bleu4=0.000 em=0 sample=0.9s ETA=0.7h
+  [checkpoint] saved 3900 results
+  [3950/5214] bleu4=0.000 em=0 sample=0.8s ETA=0.7h
+  [4000/5214] bleu4=0.000 em=0 sample=4.1s ETA=0.7h
+  [checkpoint] saved 4000 results
+  [4050/5214] bleu4=0.000 em=0 sample=1.6s ETA=0.6h
+  [4100/5214] bleu4=0.000 em=0 sample=0.7s ETA=0.6h
+  [checkpoint] saved 4100 results
+  [4150/5214] bleu4=0.000 em=0 sample=1.4s ETA=0.6h
+  [4200/5214] bleu4=0.000 em=0 sample=1.9s ETA=0.5h
+  [checkpoint] saved 4200 results
+  [4250/5214] bleu4=0.440 em=0 sample=2.3s ETA=0.5h
+  [4300/5214] bleu4=0.000 em=0 sample=0.7s ETA=0.5h
+  [checkpoint] saved 4300 results
+  [4350/5214] bleu4=0.000 em=0 sample=1.4s ETA=0.5h
+  [4400/5214] bleu4=0.000 em=0 sample=2.0s ETA=0.4h
+  [checkpoint] saved 4400 results
+  [4450/5214] bleu4=0.000 em=0 sample=1.3s ETA=0.4h
+  [4500/5214] bleu4=0.000 em=0 sample=0.8s ETA=0.4h
+  [checkpoint] saved 4500 results
+  [4550/5214] bleu4=0.597 em=0 sample=0.5s ETA=0.4h
+  [4600/5214] bleu4=0.000 em=0 sample=1.5s ETA=0.3h
+  [checkpoint] saved 4600 results
+  [4650/5214] bleu4=0.782 em=0 sample=0.8s ETA=0.3h
+  [4700/5214] bleu4=0.000 em=0 sample=1.0s ETA=0.3h
+  [checkpoint] saved 4700 results
+  [4750/5214] bleu4=0.000 em=0 sample=0.9s ETA=0.3h
+  [4800/5214] bleu4=0.084 em=0 sample=0.8s ETA=0.2h
+  [checkpoint] saved 4800 results
+  [4850/5214] bleu4=0.000 em=0 sample=0.7s ETA=0.2h
+  [4900/5214] bleu4=0.000 em=0 sample=16.3s ETA=0.2h
+  [checkpoint] saved 4900 results
+  [4950/5214] bleu4=0.000 em=0 sample=12.8s ETA=0.1h
+  [5000/5214] bleu4=0.000 em=0 sample=0.7s ETA=0.1h
+  [checkpoint] saved 5000 results
+  [5050/5214] bleu4=0.500 em=0 sample=1.3s ETA=0.1h
+  [5100/5214] bleu4=0.000 em=0 sample=1.0s ETA=0.1h
+  [checkpoint] saved 5100 results
+  [5150/5214] bleu4=0.000 em=0 sample=1.5s ETA=0.0h
+  [5200/5214] bleu4=0.000 em=0 sample=0.5s ETA=0.0h
+  [checkpoint] saved 5200 results
+[eval] scores written to /scratch/eh3115/Decompliler/Decompliler/results/full_scores_clean.csv
+[eval] full table written to /scratch/eh3115/Decompliler/Decompliler/results/full_scores_clean_table.csv
+
+[eval] === RESULTS ===
+  Total:        5214
+  Avg BLEU-4:   0.1708
+  Exact match:  1.2%  (60/5214)
+  BLEU >= 0.9:  88
+  BLEU < 0.5:   4526
+JOB END
+Tue Jun 16 16:46:28 +04 2026

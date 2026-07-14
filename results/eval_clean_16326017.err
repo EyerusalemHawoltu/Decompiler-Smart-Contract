@@ -1,0 +1,3 @@
+Loading module 'cuda/11.8.0'
+/home/eh3115/.conda/envs/nova/lib/python3.10/site-packages/transformers/utils/hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(

@@ -1,0 +1,8 @@
+reading /scratch/eh3115/Decompliler/Decompliler/datasets/cfg_dataset/cfg.jsonl
+aligned: 596925 (cfg,solidity) pairs from 72637 contracts
+unique solidity bodies: 37891
+  test: 7578 samples (7578 unique bodies)
+  valid: 7578 samples (7578 unique bodies)
+  train: 22735 samples (22735 unique bodies)
+saved /scratch/eh3115/Decompliler/Decompliler/datasets/cfg_dataset/nova-cfg
+test_set.json: 7578 functions

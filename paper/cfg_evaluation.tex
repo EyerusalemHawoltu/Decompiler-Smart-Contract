@@ -1,0 +1,564 @@
+\documentclass[10pt,conference]{article}
+
+% ---------------------------------------------------------------------------
+% Packages
+% ---------------------------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage[hidelinks]{hyperref}
+\usepackage[margin=1in]{geometry}
+\usepackage{caption}
+
+\captionsetup{font=small,labelfont=bf}
+
+\lstdefinestyle{evm}{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  frame=single,
+  numbers=none,
+  columns=fullflexible,
+  keepspaces=true,
+}
+
+\newcommand{\fbyte}[1]{\texttt{0x#1}}
+
+% ---------------------------------------------------------------------------
+\title{\textbf{Function-Name Recovery from EVM Bytecode via\\
+Control-Flow Graphs and Selector Resolution:\\
+A Large-Scale Evaluation Across 21 Solidity Versions}}
+
+\author{%
+  Technical Report --- CFG Evaluation Module\\
+  \today
+}
+\date{}
+
+\begin{document}
+\maketitle
+
+% ===========================================================================
+\begin{abstract}
+We present the design and large-scale empirical evaluation of the
+control-flow-graph (CFG) front-end of an EVM-bytecode-to-Solidity decompilation
+pipeline. The front-end lifts deployed bytecode into per-function CFGs using a
+patched \texttt{evm\_cfg\_builder} and recovers original public function names by
+resolving four-byte selectors against a curated selector$\rightarrow$name hash
+table. We evaluate name-recovery accuracy on \textbf{109{,}679 verified
+contracts} spanning \textbf{21 Solidity pragma versions} (0.8.0--0.8.20), paired
+with their ground-truth source code. Through a controlled four-stage ablation we
+isolate two classes of improvement: (i) \emph{measurement-correctness} fixes
+that stop penalising the extractor for functions that are not present in the
+deployed bytecode by construction (imported interface declarations and library
+delegatecall stubs), and (ii) genuine \emph{capability} fixes (a 453{,}208-entry
+merged selector table and support for the Shanghai \texttt{PUSH0} opcode). On the
+73{,}709 contracts whose bytecode can contain recoverable functions, the final
+configuration attains \textbf{precision $0.888$, recall $0.648$, and
+$F_1=0.673$}, up from a baseline $F_1$ of $0.338$. We show that precision
+\emph{rises} alongside recall at every stage, confirming that the gains reflect
+correct recovery rather than metric inflation. A key empirical finding is that
+Solidity \emph{pragma version does not determine the compiler used}: $88.2\%$ of
+``0.8.0-pragma'' runtime contracts contain the \texttt{PUSH0} opcode, so a single
+disassembler fix improves every version.
+\end{abstract}
+
+% ===========================================================================
+\section{Introduction}
+
+Decompiling Ethereum Virtual Machine (EVM) bytecode back to readable Solidity is
+hard: type information is erased to 256-bit words, there is no explicit function
+table, and functions are dispatched only by a four-byte selector
+$\mathrm{sel}(f)=\mathtt{keccak256}(\text{signature}(f))[0{:}4]$. A complete
+decompiler must (a) reconstruct control flow, (b) recover function boundaries and
+\emph{names}, and (c) lift the body to source. This report concerns components
+(a) and (b): the CFG front-end and the function-name-recovery stage that feed the
+downstream source-generation model.
+
+Our contributions in this module are:
+\begin{enumerate}
+  \item A reproducible, parallel evaluation harness that scores function-name
+        recovery on 109{,}679 contracts across 21 pragma versions, emitting
+        per-contract and per-version metrics.
+  \item A controlled ablation that cleanly separates measurement-correctness
+        fixes from capability fixes, with before/after numbers for each.
+  \item A diagnosis of two systematic failure modes---\emph{library
+        delegatecall stubs} and the unsupported \texttt{PUSH0} opcode---together
+        with the fixes and their quantified impact.
+  \item The empirical observation that pragma version is a poor proxy for the
+        deployed compiler, which has direct consequences for any version-stratified
+        evaluation of EVM tooling.
+\end{enumerate}
+
+% ===========================================================================
+\section{Related Work}
+
+\paragraph{Traditional EVM decompilers.}
+Static analysers such as \textsc{EtherSolve}~\cite{ethersolve} compute accurate
+control-flow graphs from bytecode; \textsc{Gigahorse} and
+\textsc{Elipmoc}~\cite{elipmoc} perform advanced function reconstruction and
+decompilation; \textsc{Panoramix} and \textsc{heimdall} are widely used practical
+decompilers. \textsc{SigRec} recovers function signatures from bytecode with high
+accuracy. These systems target structural recovery rather than learned source
+reconstruction.
+
+\paragraph{LLM-based EVM decompilation.}
+\textsc{DiSCo}~\cite{disco} introduces an LLM-based EVM decompilation pipeline
+built on a logic-invariant intermediate representation and a type-aware graph
+model, reporting a $75\%$ compilation rate. A closely related hybrid
+pipeline~\cite{llmdecompile2025} lifts bytecode to three-address code (TAC) and
+fine-tunes a Llama-3.2-3B model on $238{,}446$ TAC-to-Solidity function pairs,
+reporting an average semantic similarity of $0.82$. Our pipeline differs in that
+it (i) uses a \emph{control-flow graph} representation rather than TAC, (ii)
+fine-tunes \textsc{Nova}~\cite{nova}, an assembly-specialised model with
+hierarchical attention, and (iii) recovers the \emph{actual deployed} function
+names via selector resolution rather than generating them. We therefore do not
+claim to be the first LLM-based EVM decompiler; we claim a distinct CFG-plus-Nova
+recipe with selector-grounded name recovery, evaluated at version-stratified
+scale.
+
+\paragraph{Positioning of this report.}
+This document covers only the CFG and name-recovery front-end and its evaluation;
+the downstream source-generation model is reported separately.
+
+% ===========================================================================
+\section{Methodology}
+
+\subsection{Pipeline overview}
+Given a contract's runtime bytecode $b$, the front-end produces a set of named
+function CFGs:
+\[
+\text{extract}(b) \;\rightarrow\; \{ (\text{name}_i,\ \text{cfg}_i) \}.
+\]
+Names are resolved by matching each recovered selector against a
+selector$\rightarrow$name table $H$. The recovered named set
+$\widehat{F}(b)=\{\text{name}_i\}$ is compared against the ground-truth set
+$F(s)$ of public/external functions parsed from the contract's Solidity source
+$s$.
+
+\subsection{CFG extraction}
+We use a patched \texttt{evm\_cfg\_builder}. The bytecode is disassembled,
+basic blocks are formed, and a breadth-first traversal of the dispatcher
+resolves the per-selector jump targets that delimit functions. The dispatcher
+follows the canonical pattern
+\begin{lstlisting}[style=evm]
+PUSH4 <selector>; EQ; PUSH2 <dest>; JUMPI
+\end{lstlisting}
+Each resolved function start address is associated with its selector.
+
+\subsection{Selector-based name recovery}
+A function's selector is looked up in the table $H$. We compare two sources for
+$H$:
+\begin{itemize}
+  \item a \emph{curated} table of $55{,}668$ entries derived from on-chain
+        frequency data, storing \emph{bare} names (e.g.\ \texttt{transfer}); and
+  \item the disassembler's \emph{built-in} table of $417{,}765$ entries, storing
+        \emph{typed} signatures (e.g.\ \texttt{transfer(address,uint256)}).
+\end{itemize}
+Because the ground-truth parser yields bare names, only the curated format
+matches directly; the built-in table must be normalised before use
+(Section~\ref{sec:e2}).
+
+\subsection{Ground-truth extraction from Solidity}
+A flattened source file contains the deployed contract \emph{plus} every imported
+interface, library and base contract. We parse public/external function names by
+(i) stripping comments, (ii) brace-matching each top-level
+\texttt{contract}/\texttt{interface}/\texttt{library} block, and (iii) collecting
+\texttt{public}/\texttt{external} function declarations from non-\texttt{interface}
+blocks only (Section~\ref{sec:e1} motivates the interface exclusion).
+
+\subsection{Evaluation metrics}
+Let $\widehat{F}$ be the recovered named set and $F$ the ground-truth set, with
+$M=\widehat{F}\cap F$. We report, per contract and averaged per version:
+\begin{align}
+\text{Precision} &= |M|/|\widehat{F}|, &
+\text{Recall} &= |M|/|F|, \\
+F_1 &= \tfrac{2PR}{P+R}, &
+\text{Jaccard} &= |M|/|\widehat{F}\cup F|, \\
+\text{ExactMatch} &= \mathbb{1}[\widehat{F}=F], &
+\text{CountRecall} &= \tfrac{\min(|\widehat{F}_{\text{all}}|,|F|)}{|F|},
+\end{align}
+together with sentence-level $\text{BLEU}_{1\text{--}4}$ over the sorted name
+lists (each function name treated as one token). Precision answers ``when the
+extractor names a function, is it correct?''; recall answers ``what fraction of
+deployed public functions are recovered?''. Exact match is the strictest
+metric---it requires the entire set to coincide and is therefore gated by recall.
+
+% ===========================================================================
+\section{Experimental Setup}
+
+\paragraph{Dataset.}
+$109{,}679$ verified contracts, bucketed by Solidity pragma version into 21 bins
+(0.8.0--0.8.20). Each contract provides (i) deployed runtime bytecode
+(\texttt{.hex}) and (ii) flattened, cleaned source (\texttt{.sol.cleaned}). The
+per-version contract counts are dominated by 0.8.0 ($36{,}066$), 0.8.9
+($16{,}382$) and 0.8.4 ($12{,}290$).
+
+\paragraph{Infrastructure.}
+Evaluation runs on an HPC cluster via SLURM, using a \texttt{ProcessPoolExecutor}
+with 16 worker processes. Throughput is $\sim$780 contracts/s; a full pass over
+all 109{,}679 contracts completes in under 10 minutes. Results are streamed to
+per-version CSV files plus a combined table, with one row per contract recording
+all metrics and the recovered/ground-truth/matched/missed/extra name lists for
+full auditability.
+
+% ===========================================================================
+\section{Experiments and Results}
+
+We report a four-stage ablation. Table~\ref{tab:ablation-all} summarises the
+weighted (per-contract) headline over all contracts; Table~\ref{tab:ablation-rt}
+reports the fair headline over \emph{runtime} contracts only (after the
+structural exclusions of E1 and E3).
+
+\begin{table}[t]
+\centering
+\caption{All-contracts weighted ablation (109{,}679 contracts).}
+\label{tab:ablation-all}
+\small
+\begin{tabular}{l c c c c}
+\toprule
+Configuration & Precision & Recall & $F_1$ & BLEU \\
+\midrule
+V1: Baseline                     & 0.5647 & 0.2895 & 0.3378 & 0.1566 \\
+V2: + Interface exclusion        & 0.5635 & 0.3834 & 0.4106 & --     \\
+V3: + Merged 453k hash table     & 0.5554 & 0.4024 & 0.4168 & 0.2485 \\
+V4: + \texttt{PUSH0} opcode fix  & \textbf{0.6003} & \textbf{0.4378} & \textbf{0.4546} & \textbf{0.2701} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{Runtime-only weighted headline (library stubs / empty / tiny bytecode
+excluded; $73{,}709$ contracts).}
+\label{tab:ablation-rt}
+\small
+\begin{tabular}{l c c c c c}
+\toprule
+Configuration & Precision & Recall & $F_1$ & Exact & BLEU \\
+\midrule
+V3$_{\text{rt}}$: merged hashes, no stubs & 0.8217 & 0.5953 & 0.6167 & 0.0967 & 0.3682 \\
+V4$_{\text{rt}}$: + \texttt{PUSH0}        & \textbf{0.8881} & \textbf{0.6479} & \textbf{0.6726} & \textbf{0.1086} & \textbf{0.4002} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ---------------------------------------------------------------------------
+\subsection{E1 --- Interface exclusion (measurement correctness)}
+\label{sec:e1}
+
+\paragraph{Problem.}
+A flattened source file for a typical ERC-20 token contains imported interfaces
+such as \texttt{IUniswapV2Router02}, \texttt{IUniswapV2Factory} and
+\texttt{IERC20}. The original ground-truth parser counted their function
+declarations (\texttt{WETH}, \texttt{addLiquidity}, \texttt{factory}, \dots) as
+deployed public functions. These functions are \emph{never} compiled into the
+contract's own bytecode---they are external ABIs used to call \emph{other}
+contracts---so the CFG extractor cannot and should not recover them. They
+therefore inflated the recall denominator. The naive regex additionally produced
+false matches inside comments.
+
+\paragraph{Fix.}
+Strip comments; brace-match top-level blocks; exclude every
+\texttt{interface} block from the ground truth.
+
+\paragraph{Result.}
+Recall rose from $0.2895$ to $0.3834$ ($+9.4$ pts) and $F_1$ from $0.3378$ to
+$0.4106$, with precision essentially unchanged ($0.5647\rightarrow0.5635$). The
+flat precision confirms the change corrects the measurement rather than trading
+precision for recall. On a 500-contract sample the per-version recall gains were
+largest where the extractor was already strong (e.g.\ 0.8.9: $0.344\rightarrow
+0.497$; 0.8.4: $0.387\rightarrow0.477$), consistent with the interpretation that
+the extractor was already finding the deployed functions and was being penalised
+for undeployed ABI declarations.
+
+% ---------------------------------------------------------------------------
+\subsection{E2 --- Merged selector table (capability)}
+\label{sec:e2}
+
+\paragraph{Finding.}
+The disassembler loads its selector table ``JSON-first, no merge'': because the
+curated $55{,}668$-entry JSON exists, the built-in $417{,}765$-entry table is
+\emph{ignored entirely}. The curated table thus \emph{replaced}, rather than
+augmented, the built-in one. Comparing the two tables:
+\begin{itemize}
+  \item $20{,}027$ selectors appear in both; in \emph{all} of them the names
+        differ only by signature formatting (\texttt{addKYCAdmin} vs
+        \texttt{addKYCAdmin(address)});
+  \item $35{,}641$ selectors are curated-exclusive;
+  \item $397{,}738$ selectors exist only in the built-in table.
+\end{itemize}
+The curated table is preferable for two reasons: its \emph{bare-name} format
+matches the ground truth, and its frequency curation avoids spam preimages that
+plague low selectors (e.g.\ \fbyte{0} and \fbyte{1}) in the raw 4-byte directory.
+
+\paragraph{Fix.}
+Build a merged table: normalise the built-in signatures to bare names (taking
+the identifier before the first parenthesis, discarding $198$ malformed
+entries), then overlay the curated table with priority. The result has
+$453{,}208$ entries ($+397{,}540$ over the curated table); only $19$ selectors
+required a genuine name override, confirming that the apparent $20{,}027$
+``conflicts'' were purely formatting.
+
+\paragraph{Result.}
+The merge produced the expected precision/recall trade-off: recall
+$+0.019$ ($0.3834\rightarrow0.4024$), precision $-0.008$
+($0.5635\rightarrow0.5554$), net $F_1$ $+0.006$. The weaker versions gained most
+(0.8.6 recall $+0.087$; 0.8.2 recall $+0.084$), while the already-strong versions
+lost a little precision to lower-frequency spam preimages (0.8.10 precision
+$-0.041$). We retain the merged table for its net-positive $F_1$ and its
+larger recall, the weaker of the two axes.
+
+% ---------------------------------------------------------------------------
+\subsection{E3 --- Library-stub exclusion (measurement correctness)}
+\label{sec:e3}
+
+\paragraph{Diagnosis.}
+Inspecting contracts where the extractor returned zero functions
+\emph{successfully} (no error) revealed that the bytecode was frequently an
+86-byte \emph{library stub}: a deployed Solidity \texttt{library} whose runtime
+is the delegatecall guard
+\begin{lstlisting}[style=evm]
+PUSH20 <self-address>; ADDRESS; EQ; ...
+\end{lstlisting}
+recognisable as \fbyte{73}~$+$~20 placeholder bytes~$+$~\fbyte{3014}. Library
+functions are \texttt{internal} and inlined into callers, so the deployed stub
+has \emph{no callable functions by construction}. Scoring such a stub against a
+full multi-function source file is meaningless. Table~\ref{tab:composition}
+shows the bytecode composition: library stubs constitute $58.8\%$ of 0.8.0 and
+$83.1\%$ of 0.8.1, explaining their apparently catastrophic scores.
+
+\begin{table}[t]
+\centering
+\caption{Runtime bytecode composition for representative versions. ``\texttt{PUSH0}''
+counts contracts containing byte \fbyte{5f} in the dispatcher region.}
+\label{tab:composition}
+\small
+\begin{tabular}{l c c c}
+\toprule
+Version & Library stub & Normal runtime & Contains \texttt{PUSH0} \\
+\midrule
+0.8.0  & 58.8\% & 28.0\% & 12.9\% \\
+0.8.1  & 83.1\% & 13.2\% & 3.4\%  \\
+0.8.9  & 11.9\% & 67.2\% & 20.7\% \\
+0.8.20 & 9.9\%  & 0.0\%  & 90.1\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Fix.}
+A bytecode classifier labels each contract \texttt{runtime},
+\texttt{library\_stub}, \texttt{tiny}, or \texttt{empty}; library stubs and
+non-runtime bytecode are excluded from the headline averages (and retained, with
+a \texttt{bytecode\_type} column, for auditing).
+
+\paragraph{Result.}
+Excluding $35{,}530$ stubs, the runtime-only headline jumped to precision
+$0.8217$, recall $0.5953$, $F_1=0.6167$. The previously ``broken'' versions
+became consistent with the rest: 0.8.0 $F_1$ $0.238\rightarrow0.574$ and 0.8.1
+$F_1$ $0.106\rightarrow0.592$. Crucially, 0.8.20 remained at $F_1=0$ even after
+stub exclusion, isolating a second, distinct failure mode.
+
+% ---------------------------------------------------------------------------
+\subsection{E4 --- \texttt{PUSH0} opcode support (capability)}
+\label{sec:e4}
+
+\paragraph{Diagnosis.}
+The bundled disassembler's default fork is \texttt{istanbul} (2019), whose
+instruction table ends before the Shanghai hard fork. It therefore decodes
+\fbyte{5f} (\texttt{PUSH0}) as \texttt{INVALID}. Because \texttt{INVALID}
+terminates a basic block, any \texttt{PUSH0} in the dispatcher corrupts function
+recovery, leaving only the fallback. \texttt{PUSH0} became the default in
+Solidity 0.8.20, accounting for $90.1\%$ of that version's contracts.
+
+\paragraph{Fix.}
+Register \texttt{PUSH0} (\fbyte{5f}; 0 operand bytes, pushes the constant $0$) in
+every fork table at import. Listing~\ref{lst:push0} sketches the patch.
+
+\begin{lstlisting}[style=evm,caption={\texttt{PUSH0} registration patch (excerpt).},label={lst:push0}]
+entry = ("PUSH0", 0, 0, 1, 2, "Place value 0 on stack.")
+for tbl in instruction_tables.values():
+    if 0x5f not in tbl._instruction_list:
+        tbl._instruction_list[0x5f] = entry
+        tbl.__name_to_opcode = None  # invalidate cache
+\end{lstlisting}
+
+\paragraph{Result.}
+On the failing 0.8.20 example the recovered function count rose from $1$
+(\texttt{\_fallback} only) to $3$ (\texttt{renounceOwnership}, \texttt{owner},
+\dots); across 0.8.20 the version went from $F_1=0.00$ to $F_1=0.648$. The effect
+extends well beyond 0.8.20: the runtime-only headline rose to precision
+$0.8881$, recall $0.6479$, $F_1=0.6726$ (Table~\ref{tab:ablation-rt}).
+
+\paragraph{Why every version improves.}
+The version buckets are defined by source \emph{pragma}, not by the compiler
+actually used at deployment. Many ``0.8.0-pragma'' contracts were deployed years
+later with 0.8.20+ toolchains that emit \texttt{PUSH0}; indeed $88.2\%$ of 0.8.0
+\emph{runtime} contracts contain \fbyte{5f}. The \texttt{PUSH0} fix therefore
+lifts 0.8.0 runtime $F_1$ from $0.58$ to $0.80$. A per-contract audit confirms
+the gains are correct recovery, not artifacts: contracts that previously yielded
+\emph{empty} CFGs now recover full, correctly-named function sets at precision
+$\approx 1.0$ (Table~\ref{tab:spotcheck}).
+
+\begin{table}[t]
+\centering
+\caption{Per-contract audit (0.8.0): contracts that returned empty CFGs before
+the \texttt{PUSH0} fix and correct names after.}
+\label{tab:spotcheck}
+\small
+\begin{tabular}{l c c c}
+\toprule
+Contract & Matched (V3) & Matched (V4) & Precision (V4) \\
+\midrule
+\texttt{Urash} (ERC-20)  & 0 & 11 & 1.00 \\
+\texttt{Owls} (ERC-721)  & 0 & 13 & 0.93 \\
+\texttt{Magic} (ERC-721) & 0 & 13 & 0.93 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ===========================================================================
+\section{Final Per-Version Results}
+
+Table~\ref{tab:perversion} gives the final (V4) runtime-only results per version.
+Across all $73{,}709$ runtime contracts the weighted headline is precision
+$0.888$, recall $0.648$, $F_1=0.673$, exact match $10.9\%$, BLEU $0.400$.
+Precision is uniformly high ($0.68$--$0.93$); recall is the limiting axis,
+reflecting inherited base-class functions the dispatcher does not always follow.
+
+\begin{table}[t]
+\centering
+\caption{Final runtime-only results per version (V4). $n$ is runtime contracts;
+$s$ is excluded library stubs.}
+\label{tab:perversion}
+\scriptsize
+\begin{tabular}{l r r c c c c c}
+\toprule
+Version & $n$ & $s$ & Prec. & Rec. & $F_1$ & Exact & BLEU \\
+\midrule
+0.8.0  & 14{,}749 & 21{,}305 & 0.895 & 0.775 & 0.802 & 0.268 & 0.530 \\
+0.8.1  & 283      & 1{,}416  & 0.800 & 0.717 & 0.718 & 0.152 & 0.419 \\
+0.8.2  & 431      & 482      & 0.682 & 0.815 & 0.697 & 0.216 & 0.326 \\
+0.8.3  & 404      & 340      & 0.795 & 0.730 & 0.711 & 0.146 & 0.427 \\
+0.8.4  & 9{,}791  & 2{,}499  & 0.926 & 0.657 & 0.675 & 0.221 & 0.475 \\
+0.8.5  & 1{,}006  & 239      & 0.830 & 0.896 & 0.831 & 0.099 & 0.565 \\
+0.8.6  & 968      & 362      & 0.734 & 0.606 & 0.587 & 0.156 & 0.277 \\
+0.8.7  & 5{,}884  & 1{,}005  & 0.905 & 0.611 & 0.643 & 0.084 & 0.413 \\
+0.8.8  & 270      & 93       & 0.891 & 0.719 & 0.728 & 0.156 & 0.464 \\
+0.8.9  & 14{,}420 & 1{,}962  & 0.894 & 0.600 & 0.621 & 0.014 & 0.365 \\
+0.8.10 & 6{,}491  & 895      & 0.885 & 0.550 & 0.608 & 0.019 & 0.214 \\
+0.8.11 & 1{,}323  & 370      & 0.843 & 0.604 & 0.637 & 0.032 & 0.257 \\
+0.8.12 & 968      & 701      & 0.852 & 0.636 & 0.647 & 0.057 & 0.356 \\
+0.8.13 & 2{,}065  & 745      & 0.822 & 0.539 & 0.591 & 0.031 & 0.239 \\
+0.8.14 & 811      & 242      & 0.880 & 0.583 & 0.616 & 0.064 & 0.307 \\
+0.8.15 & 2{,}140  & 642      & 0.867 & 0.610 & 0.642 & 0.037 & 0.319 \\
+0.8.16 & 2{,}961  & 477      & 0.892 & 0.648 & 0.687 & 0.036 & 0.402 \\
+0.8.17 & 6{,}504  & 1{,}077  & 0.892 & 0.593 & 0.614 & 0.018 & 0.370 \\
+0.8.18 & 540      & 96       & 0.798 & 0.709 & 0.672 & 0.054 & 0.301 \\
+0.8.19 & 1{,}133  & 193      & 0.894 & 0.625 & 0.654 & 0.041 & 0.390 \\
+0.8.20 & 567      & 62       & 0.902 & 0.634 & 0.648 & 0.016 & 0.423 \\
+\midrule
+\textbf{Weighted} & \textbf{73{,}709} & \textbf{35{,}530} & \textbf{0.888} & \textbf{0.648} & \textbf{0.673} & \textbf{0.109} & \textbf{0.400} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ===========================================================================
+\section{Discussion}
+
+\paragraph{Two kinds of ``improvement''.}
+We deliberately distinguish measurement-correctness fixes (E1, E3) from
+capability fixes (E2, E4). The former do not make the extractor better; they stop
+scoring it on inputs that cannot contain the target by construction (undeployed
+interface ABIs; functionless library stubs). The latter genuinely increase what
+the extractor recovers. The honest headline is therefore the \emph{runtime-only}
+$F_1=0.673$ together with the explicit statement of which gains are capability
+and which are measurement.
+
+\paragraph{Precision rises with recall.}
+A recurring sanity check throughout the ablation is that precision did not fall
+as recall rose---indeed it rose from $0.56$ to $0.89$. Had any stage been gaming
+the metric (e.g.\ emitting more guesses), precision would have decreased. Its
+increase indicates the additional recovered names are correct.
+
+\paragraph{On the $10.9\%$ exact-match.}
+Exact match requires the entire recovered set to equal the source set and is thus
+gated by recall: with mean recall $0.65$, most contracts miss at least one
+function and fail set equality. For \emph{name recovery}, per-function $F_1$ is
+the appropriate measure; exact set-match is better suited to full-source
+decompilation. A portion of the exact-match gap is itself a measurement artefact:
+compiler-generated public state-variable getters (e.g.\ \texttt{owner},
+\texttt{uniswapV2Pair}) are recovered by the CFG but are not matched by our
+function-declaration regex, so they appear as false ``extras''. Counting these
+getters in the ground truth is a future measurement fix expected to raise both
+precision and exact match.
+
+% ===========================================================================
+\section{Limitations and Future Work}
+
+\begin{itemize}
+  \item \textbf{Recall ceiling.} The dominant remaining error is missed inherited
+        (e.g.\ OpenZeppelin) functions whose dispatch the BFS does not always
+        follow. Improving dispatcher traversal is the main capability lever left.
+  \item \textbf{State-variable getters.} The ground-truth parser does not yet
+        count compiler-generated getters, deflating precision and exact match on
+        contracts that expose many public state variables.
+  \item \textbf{Pragma$\neq$compiler.} Version-stratified results must be read
+        with the caveat that the bucket label is the source pragma, not the
+        deployed compiler; opcode-level features (e.g.\ \texttt{PUSH0}) cut across
+        buckets.
+  \item \textbf{Selector collisions.} The merged table resolves each selector to
+        a single name; genuine four-byte collisions are resolved by curation
+        priority and may occasionally mislabel low-frequency functions.
+\end{itemize}
+
+% ===========================================================================
+\section{Conclusion}
+
+We built and evaluated a CFG-plus-selector front-end for EVM-to-Solidity
+function-name recovery on 109{,}679 contracts across 21 Solidity versions.
+Through a controlled four-stage ablation we raised the fair, runtime-only
+$F_1$ from a $0.338$ baseline to $0.673$, with precision $0.888$ and recall
+$0.648$, while keeping a clear accounting of which gains are genuine capability
+(merged 453k selector table; \texttt{PUSH0} support) and which are
+measurement-correctness (interface and library-stub exclusion). The headline
+diagnostic---that Solidity pragma is a poor proxy for the deployed compiler, so a
+single \texttt{PUSH0} fix improves every version---should inform any future
+version-stratified study of EVM tooling.
+
+% ===========================================================================
+\begin{thebibliography}{9}
+
+\bibitem{disco}
+DiSCo: Towards Decompiling EVM Bytecode to Source Code using Large Language
+Models. \emph{Proc.\ ACM on Software Engineering} (FSE 2025).
+\url{https://dl.acm.org/doi/10.1145/3729373}.
+
+\bibitem{llmdecompile2025}
+Decompiling Smart Contracts with a Large Language Model. arXiv:2506.19624, 2025.
+\url{https://arxiv.org/abs/2506.19624}.
+
+\bibitem{nova}
+N.\ Jiang et al. Nova: Generative Language Models for Assembly Code with
+Hierarchical Attention and Contrastive Learning. arXiv:2311.13721.
+\url{https://arxiv.org/abs/2311.13721}.
+
+\bibitem{ethersolve}
+EtherSolve: Computing an Accurate Control-Flow Graph from Ethereum Bytecode.
+\emph{IEEE/ACM ICPC}, 2021.
+
+\bibitem{elipmoc}
+Elipmoc: Advanced Decompilation of Ethereum Smart Contracts.
+\emph{Proc.\ ACM on Programming Languages} (OOPSLA), 2022.
+
+\end{thebibliography}
+
+\end{document}

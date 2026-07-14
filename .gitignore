@@ -1,2 +1,35 @@
-__pycache__
-validate_loss.py
+# ── envs / caches ──
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+.ipynb_checkpoints/
+
+# ── raw data & datasets (see Google Drive, not git) ──
+Contracts_Bytecode/
+Contracts_By_Version_Cleaned/
+Cleaned_Aligned_JSON/
+data-tokenized/
+datasets/
+*.hex
+*.jsonl
+*.arrow
+
+# ── trained models ──
+checkpoints/
+
+# ── external tools / large binaries ──
+gigahorse-toolchain/
+gigahorse_sbx/
+*.sif
+*.facts
+evm_cfg_builder_pristine/
+**/known_hashes/known_hashes.py
+**/decoded_function.csv
+
+# ── large results (keep CSV summaries, PDFs, comparison; drop big jsons & per-contract CSVs) ──
+results/*.json
+results/*.json.bak
+results/cfg_eval/all_results*.csv
+results/cfg_eval/0.8.*_results.csv
+results/cfg_eval_*/

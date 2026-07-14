@@ -1,0 +1,5 @@
+Running eval_cfg_csv.py for version 0.8.0 only
+Contracts to evaluate : 36257
+Workers               : 16
+Output directory      : /scratch/eh3115/Decompliler/Decompliler/results/cfg_eval
+

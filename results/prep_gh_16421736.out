@@ -1,0 +1,8 @@
+reading /scratch/eh3115/Decompliler/Decompliler/datasets/gigahorse_dataset/gigahorse_tac.jsonl
+aligned: 866173 (tac,solidity) pairs from 73723 contracts
+unique solidity bodies: 46468
+  test: 9293 samples (9293 unique bodies)
+  valid: 9293 samples (9293 unique bodies)
+  train: 27882 samples (27882 unique bodies)
+saved /scratch/eh3115/Decompliler/Decompliler/datasets/gigahorse_dataset/nova-gigahorse
+test_set.json: 9293 functions

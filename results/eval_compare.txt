@@ -1,0 +1,31 @@
+BOTH_DONE
+===== CFG vs Gigahorse comparison =====
+===== fair "correct modulo variable names" metric =====
+  functions          : 5214
+  exact match (raw)  : 60 (1.15%)
+  NORMALIZED match   : 467 (8.96%)
+  per-version normalized-match:
+    0.8.0    157/1418 = 11.1%
+    0.8.1    6/79 = 7.6%
+    0.8.2    3/72 = 4.2%
+    0.8.3    3/57 = 5.3%
+    0.8.4    59/718 = 8.2%
+    0.8.5    7/53 = 13.2%
+    0.8.6    16/206 = 7.8%
+    0.8.7    43/398 = 10.8%
+    0.8.8    3/25 = 12.0%
+    0.8.9    23/372 = 6.2%
+    0.8.10   27/355 = 7.6%
+    0.8.11   10/183 = 5.5%
+    0.8.12   12/101 = 11.9%
+    0.8.13   25/252 = 9.9%
+    0.8.14   3/88 = 3.4%
+    0.8.15   15/185 = 8.1%
+    0.8.16   16/122 = 13.1%
+    0.8.17   29/397 = 7.3%
+    0.8.18   7/57 = 12.3%
+    0.8.19   3/76 = 3.9%
+wrote /scratch/eh3115/Decompliler/Decompliler/results/full_scores_clean_normalized.csv
+model               n   BLEU-4   exact%  norm-match%
+CFG (improved)     2000   0.1706     0.45         6.55
+Gigahorse TAC     2000   0.1535     0.55         6.80

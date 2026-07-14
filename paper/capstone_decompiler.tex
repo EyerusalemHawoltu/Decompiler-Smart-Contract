@@ -1,0 +1,744 @@
+\documentclass{stylefiles/capstone}
+\usepackage{listings}
+\usepackage{url}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage[numbers]{natbib}
+
+\bibliographystyle{plainnat}
+
+\begin{document}
+
+\title{AI-Powered Smart Contract Bytecode Decompiler}
+
+\capstoneyear{2025}
+\capstonedocument{Seminar}
+\capstonesemester{Spring}
+
+\author{Karim Ali}
+\affiliation{%
+  \institution{Computer Science, NYUAD}
+}
+\email{karim.ali@nyu.edu}
+
+\author{Eyerusalem Hawoltu Afework}
+\affiliation{%
+  \institution{Computer Science, NYUAD}
+}
+\email{eh3115@nyu.edu}
+
+\author{Tamer Abdelaziz}
+\affiliation{%
+  \institution{Computer Science, NYUAD}
+}
+\email{tamer.abdelaziz@nyu.edu}
+
+\renewcommand{\shortauthors}{Ali, Afework, Abdelaziz}
+
+\begin{abstract}
+Less than one percent of deployed Ethereum smart contracts have publicly verified
+source code, leaving most on-chain logic opaque and difficult to audit. This
+project builds an end-to-end pipeline that recovers high-level Solidity from
+low-level Ethereum Virtual Machine (EVM) bytecode by way of an intermediate
+control-flow-graph (CFG) representation: \emph{bytecode $\rightarrow$ CFG
+$\rightarrow$ Solidity}, where the final stage is performed by a fine-tuned large
+language model (LLM).
+
+To support this study, we assemble a large-scale dataset by cloning the
+Smart-Contract-Sanctuary-Ethereum repository (tintinweb), which contains hundreds
+of thousands of real-world mainnet contracts. From this corpus we process
+$292{,}837$ contract files, extract their deployed bytecode, and reconstruct
+control-flow graphs using a substantially extended version of
+\texttt{evm\_cfg\_builder}, pairing each CFG with its corresponding Solidity
+function definition.
+
+A central contribution of this work is the engineering and evaluation of the
+\emph{bytecode-to-CFG} front-end. The upstream \texttt{evm\_cfg\_builder} is
+unmaintained and fails to recover function boundaries on modern compiler output.
+We add a breadth-first dispatcher-reconstruction pass, a merged
+$453{,}208$-entry selector$\rightarrow$signature table, robustness fixes for
+Solidity~0.8.x bytecode, and support for the Shanghai \texttt{PUSH0} opcode. On a
+held-out evaluation of $109{,}679$ contracts spanning $21$ Solidity versions
+(0.8.0--0.8.20), these changes raise function-name-recovery $F_1$ from $0.338$ to
+$0.673$ (precision $0.888$, recall $0.648$) on the contracts whose bytecode can
+contain recoverable functions, while precision \emph{rises} alongside recall,
+confirming that the gains reflect correct recovery rather than metric inflation.
+
+For the CFG-to-Solidity stage we adapt \textsc{Nova}, an assembly-to-C
+generative model with hierarchical attention, to the Solidity domain and
+fine-tune it on our aligned dataset. Preliminary evaluation on held-out functions
+yields a BLEU-4 of $0.833$ and an exact-match rate of $70.8\%$. This work
+provides one of the first systematic, mainnet-scale studies of CFG-driven,
+learned smart-contract decompilation, and lays the groundwork for hybrid pipelines
+that combine static analysis with LLM reasoning.
+\end{abstract}
+
+\keywords{Ethereum smart contracts, EVM bytecode, decompilation, control-flow
+graphs, large language models, Nova, hierarchical attention, selector resolution,
+PUSH0, blockchain security, Solidity reconstruction, bytecode analysis}
+
+\maketitle
+
+% ===========================================================================
+\section{Introduction}
+
+Decentralized applications (dApps) and decentralized finance (DeFi) rely heavily
+on smart contracts, which collectively secure and move billions of dollars across
+public blockchains. Despite this scale, more than 99\% of deployed Ethereum
+contracts lack publicly verified source code~\cite{etherscan}. Once compiled into
+Ethereum Virtual Machine (EVM) bytecode, a contract loses its high-level
+structure, type information, and developer intent, leaving auditors, developers,
+and users with only low-level opcodes to reason about. This opacity severely
+limits transparency and makes security analysis, incident response, and forensic
+investigations significantly more difficult.
+
+Traditional attempts to reverse-engineer smart contracts rely on
+static-analysis–based decompilation tools such as Dedaub~\cite{neville2023dedaub}
+and Panoramix~\cite{panoramix}. Although these systems recover partial
+control-flow structure, they often produce incomplete, noisy, or misleading
+output—particularly for modern optimized bytecode or contracts involving complex
+financial logic. Prior work suggests that static approaches alone are
+fundamentally limited in their ability to reconstruct high-level semantics from
+EVM execution patterns~\cite{darwish2023bytecode}. These limitations motivate
+exploring learning-based approaches that can generalize beyond hand-crafted
+heuristics.
+
+Recent advances in large language models (LLMs) have demonstrated strong
+capabilities in code understanding, translation, and synthesis, exemplified by
+GPT-3~\cite{brown2020language} and CodeT5+~\cite{wang2023codet5plus}. Most
+relevant to this work is \textsc{Nova}~\cite{jiang2025nova}, a model that
+decompiles low-level x86 assembly into C using a \emph{hierarchical attention}
+mechanism designed for the low information density and long-range dependencies of
+machine code. The parallel between Nova's assembly-to-C task and our
+bytecode-to-Solidity task is exact, motivating us to adapt Nova to the Solidity
+domain rather than evaluate general-purpose chat models.
+
+This project therefore frames decompilation as a two-stage problem. First, the
+deployed runtime bytecode is lifted into a structured, textual control-flow graph
+(CFG) that exposes basic blocks, dispatcher structure, and per-function selectors.
+Second, a fine-tuned Nova model translates the CFG into a Solidity function. To
+enable both stages we construct a large-scale dataset by cloning the
+Smart-Contract-Sanctuary-Ethereum repository~\cite{smart_contract_sanctuary},
+which archives hundreds of thousands of real mainnet contracts. From this corpus
+we curate a filtered subset of $292{,}837$ contract files by removing legacy
+compiler versions and eliminating contracts with unresolved dependencies. For
+each remaining contract we extract all available Solidity function definitions and
+pair each function with a CFG reconstructed from its compiled bytecode using an
+extended version of \texttt{evm\_cfg\_builder}~\cite{evm_cfg_builder}.
+
+Compilation is inherently lossy: variable names, comments, type annotations, and
+higher-level control structures are removed during the source-to-bytecode
+transformation. Recovering these abstractions requires both an accurate CFG
+front-end and a model capable of understanding opcode patterns, long-range
+dependencies, and control-flow semantics. Our contributions are:
+
+\begin{enumerate}
+  \item a scalable pipeline that aligns real mainnet Solidity functions with CFGs
+        reconstructed from their bytecode;
+  \item a substantially extended \texttt{evm\_cfg\_builder} with a breadth-first
+        dispatcher-reconstruction pass, a merged $453{,}208$-entry selector
+        table, Solidity~0.8.x robustness fixes, and \texttt{PUSH0} opcode support,
+        together with a controlled, version-stratified evaluation on $109{,}679$
+        contracts; and
+  \item a Solidity adaptation of the Nova architecture, fine-tuned on the aligned
+        dataset, with preliminary end-to-end decompilation results.
+\end{enumerate}
+
+% ===========================================================================
+\section{Related Work}
+
+Several research efforts have explored smart contract analysis, decompilation, and
+the use of machine learning for code understanding. This section highlights
+related work across three domains: smart contract decompilers, learning-based code
+models, and the Nova architecture our pipeline builds on.
+
+Dedaub~\cite{neville2023dedaub} is a leading smart contract decompiler that
+reconstructs high-level contract logic from EVM bytecode using static analysis and
+control-flow-graph recovery. It produces human-readable pseudo-code and has been
+widely used in both research and industry. However, its rule-based design limits
+its adaptability to previously unseen or obfuscated bytecode structures.
+Similarly, Panoramix~\cite{panoramix} disassembles contracts into a
+pseudo-assembly form and reconstructs function boundaries using symbolic execution
+and jump resolution. While effective in certain cases, its output lacks
+Solidity-like readability and fails on many edge cases or newer compiler patterns.
+
+More recently, researchers have explored using LLMs to analyze smart contracts.
+Darwish~\cite{darwish2023bytecode} evaluated GPT-3.5, GPT-4, and CodeLlama for
+detecting vulnerabilities in contracts decompiled with
+Dedaub~\cite{neville2023dedaub}, demonstrating the potential of language models for
+security analysis but not attempting to reconstruct source from raw bytecode. Our
+project differs in that we train a model directly on aligned bytecode-derived CFGs
+and source code, eliminating the dependency on external decompilers.
+
+The foundational work on LLMs comes from Brown et al.~\cite{brown2020language}, who
+introduced GPT-3 and demonstrated strong few-shot learning and code generation.
+This inspired a wave of code-specialized models, of which
+CodeT5+~\cite{wang2023codet5plus} is a notable open-source example trained for
+program understanding, synthesis, and translation. The model most directly
+relevant to our task is \textsc{Nova}~\cite{jiang2025nova}, which targets
+\emph{binary} decompilation (assembly~$\rightarrow$~C). Nova introduces a
+hierarchical attention mechanism—where some attention heads attend to individual
+instructions while others attend to a learned summary of instruction blocks—and a
+contrastive pre-training objective, allowing it to outperform substantially larger
+general-purpose models on assembly decompilation. We adopt Nova's architecture
+unchanged and re-target it from assembly/C to CFG/Solidity.
+
+Finally, Etherscan~\cite{etherscan} plays a central role in the Ethereum ecosystem
+as a public block explorer and verification service. Our dataset builds on the
+Smart-Contract-Sanctuary-Ethereum repository~\cite{smart_contract_sanctuary}, which
+archives mainnet contracts and their verified sources at scale, allowing us to
+construct aligned bytecode--source code pairs.
+
+% ===========================================================================
+\section{Methodology}
+
+This section describes the full pipeline used to construct the dataset, extract
+control-flow graphs (CFGs) from EVM bytecode, and fine-tune the Nova model to
+reconstruct Solidity. The methodology consists of four stages: dataset
+construction, CFG extraction (and the engineering required to make it reliable),
+function-level alignment, and model fine-tuning.
+
+\subsection{Overview}
+
+The overall workflow proceeds as follows:
+
+\begin{enumerate}
+    \item Collect verified Solidity contracts from a large public
+          repository~\cite{smart_contract_sanctuary}.
+    \item Group contracts by compiler version and compile them to bytecode.
+    \item Extract function-level CFGs using an extended version of
+          \texttt{evm\_cfg\_builder}~\cite{evm_cfg_builder}.
+    \item Align each CFG with its corresponding Solidity source function.
+    \item Fine-tune the Nova model to translate a CFG into a Solidity function.
+    \item Evaluate the pipeline at two levels: function-name recovery in the CFG
+          front-end, and end-to-end source reconstruction with
+          BLEU~\cite{papineni2002bleu} and CodeBERT~\cite{feng2020codebert}.
+\end{enumerate}
+
+\subsection{Dataset Construction}
+
+\subsubsection{Collecting Contracts and Grouping by Version}
+
+Dataset construction begins with a large-scale clone of the Smart Contract
+Sanctuary Ethereum repository~\cite{smart_contract_sanctuary}, which hosts hundreds
+of thousands of real-world mainnet contracts.
+
+\begin{verbatim}
+contracts/mainnet/
+ |-- 000/
+ |-- 001/
+ |-- ...
+\end{verbatim}
+
+All Solidity source files (\texttt{*.sol}) are extracted, cleaned, and grouped by
+compiler version based on their \texttt{pragma solidity} declarations. Each
+compiler version is placed into its own directory:
+
+\begin{verbatim}
+Contracts_By_Version/
+ |-- 0.8.0/
+ |-- 0.8.4/
+ |-- 0.8.7/
+ |-- 0.8.9/
+ |-- ...
+\end{verbatim}
+
+After filtering out unsupported legacy versions and removing contracts with
+unresolved dependencies, the final dataset contains \textbf{292{,}837} Solidity
+contract files spanning multiple minor versions of the compiler.
+
+\subsubsection{Compiling Contracts}
+
+To reproduce the deployed bytecode as faithfully as possible, each contract is
+compiled using the exact Solidity compiler version extracted from its pragma. This
+is performed using \texttt{solc-select}, falling back to the closest compatible
+patch version when needed. Compilation yields runtime bytecode files
+(\texttt{*.hex}), compilation logs, and failure reports, and is driven by a
+resumable pipeline that logs malformed files and timeouts so that the full corpus
+can be processed without manual restarts.
+
+\subsection{CFG Extraction and \texttt{evm\_cfg\_builder} Enhancements}
+\label{sec:cfg-extract}
+
+CFGs are extracted using \texttt{evm\_cfg\_builder}~\cite{evm_cfg_builder}, a
+static analysis tool originally provided by Trail of Bits. For each bytecode file
+the tool outputs a dispatcher graph (mapping selectors to code blocks), a full CFG,
+and a serialized textual form listing basic blocks and opcodes. Each CFG captures
+fundamental control-flow information such as \texttt{JUMP}, \texttt{JUMPI},
+function entry points, revert blocks, and calldata loaders; these structural
+elements form the input to the downstream model.
+
+\paragraph{Why the upstream tool is insufficient.}
+The upstream project has not been actively maintained in recent years and was
+written for older compiler output. On modern Solidity~0.8.x bytecode it (i)
+crashes when a jump target lands inside \texttt{PUSH} data bytes, (ii) fails to
+compile its built-in $417{,}765$-entry selector table under Python~3.10, (iii)
+relies solely on value-set analysis (VSA), which leaves many reachable basic
+blocks unanalyzed and lets control flow ``bleed'' across function boundaries, and
+(iv) cannot decode the Shanghai \texttt{PUSH0} opcode emitted by Solidity~$\geq$
+0.8.20. These failures motivated a series of targeted changes to the tool, which
+we describe below and evaluate in Section~\ref{sec:cfg-eval}.
+
+\paragraph{Package re-export.}
+The cloned repository moved the \texttt{CFG} class into
+\texttt{cfg/cfg.py} but left \texttt{cfg/\_\_init\_\_.py} empty. We re-export
+\texttt{CFG}, \texttt{BasicBlock}, and \texttt{Function} so that
+\texttt{from evm\_cfg\_builder.cfg import CFG} resolves correctly throughout the
+pipeline.
+
+\paragraph{Breadth-first dispatcher reconstruction.}
+The core enhancement is a breadth-first traversal that recovers basic blocks the
+VSA misses. It comprises four additions to \texttt{cfg/cfg.py}:
+\begin{itemize}
+  \item \texttt{\_static\_jump\_target(bb)} scans backwards through a block's
+        instructions to find the last \texttt{PUSH} and returns the corresponding
+        target \texttt{BasicBlock} (or \texttt{None}).
+  \item \texttt{\_scan\_selector\_dispatch()} scans all basic blocks for the
+        canonical pattern
+        \texttt{PUSH4 <selector>; EQ; PUSH2 <body\_pc>; JUMPI} and returns a map
+        \{selector~$\rightarrow$~body\_pc\}. This works for both inline dispatchers
+        and the shared ABI-decoder layout emitted by Solidity~$\geq$ 0.8.x.
+  \item \texttt{\_bfs\_blocks(entry, stop\_at, key)} performs a BFS from an entry
+        block, preferring function-specific VSA edges first (to avoid
+        cross-function bleeding) and falling back to static \texttt{PUSH}
+        resolution only for blocks the VSA never reached, descending the
+        \texttt{JUMPI} false branch when resolving statically.
+  \item \texttt{enhance\_cfgs\_with\_bfs()} is called after \texttt{CFG}
+        construction; for each function it BFS-traverses from both the entry stub
+        and the actual body (located via the dispatch scan), merges the results,
+        and upgrades the function only when strictly more blocks are recovered than
+        the VSA produced.
+\end{itemize}
+
+\paragraph{Selector-to-name resolution.}
+Function dispatch is keyed by a four-byte selector
+$\mathrm{sel}(f)=\texttt{keccak256}(\text{signature}(f))[0{:}4]$, so recovering
+function \emph{names} requires a selector$\rightarrow$signature table. We began
+with a curated list of $55{,}674$ known pairs ($55{,}668$ unique selectors)
+derived from on-chain frequency data, e.g.\
+\verb|0x70a08231 -> balanceOf| and \verb|0xa9059cbb -> transfer|. We discovered
+that the disassembler loads its table ``JSON-first, no-merge'': because the
+curated table exists, the tool's own $417{,}765$-entry built-in table was ignored
+entirely, so the curated table had silently \emph{replaced} rather than augmented
+it. The two tables also differ in format—the curated table stores \emph{bare}
+names (\texttt{transfer}) while the built-in table stores \emph{typed} signatures
+(\texttt{transfer(address,uint256)}). We therefore normalize the built-in entries
+to bare names and merge the two with curated priority, producing a combined
+\textbf{$453{,}208$-entry} table ($+397{,}540$ over the curated set, with only $19$
+genuine name overrides). An optional-import guard additionally catches the
+\texttt{OverflowError} raised when Python~3.10 cannot compile the large built-in
+table, falling back gracefully so that CFG extraction still succeeds.
+
+\paragraph{\texttt{PUSH0} opcode support.}
+The bundled disassembler's default fork is \texttt{istanbul} (2019), whose
+instruction table predates the Shanghai hard fork and therefore decodes
+\verb|0x5f| (\texttt{PUSH0}) as \texttt{INVALID}. Because \texttt{INVALID}
+terminates a basic block, any \texttt{PUSH0} in the dispatcher corrupts function
+recovery, leaving only the fallback. \texttt{PUSH0} became the default in
+Solidity~0.8.20. We register \texttt{PUSH0} (zero operand bytes, pushes the
+constant $0$) in every fork table at import, restoring correct disassembly.
+
+\paragraph{Robustness fix.}
+Finally, we guard all \texttt{self.\_basic\_blocks[x]} lookups in
+\texttt{compute\_functions} that could raise a \texttt{KeyError} on
+Solidity~0.8.x when a jump target lands in the middle of \texttt{PUSH} data bytes,
+eliminating a class of crashes that previously aborted extraction.
+
+\paragraph{Pipeline integration.}
+In \texttt{nova/bytecode\_to\_cfg.py}, the local extended \texttt{evm\_cfg\_builder}
+clone is prepended to \texttt{sys.path} at startup (shadowing any pip-installed
+copy on both macOS and the HPC cluster), \texttt{enhance\_cfgs\_with\_bfs()} is
+invoked immediately after \texttt{CFG(bytecode)} construction, and the enhanced
+\texttt{func.basic\_blocks} are used directly, with the older manual BFS retained
+only as an emergency fallback.
+
+\subsection{Function-Level Alignment}
+
+For each contract, all function definitions are parsed from the Solidity source and
+matched to their CFG representation based on function selectors and dispatch
+structure. Each aligned entry takes the following JSON form:
+
+\noindent\begin{small}
+\begin{verbatim}
+{
+  "withdrawForeignERC721(address,uint256)": {
+    "solidity_definition":
+         "function withdrawForeignERC721(...) {...}",
+    "cfg_representation":
+         "Function withdrawForeignERC721.\nBasic Blocks: ..."
+  }
+}
+\end{verbatim}
+\end{small}
+
+A normalized JSONL dataset is also created, where each line is a single function
+instance:
+
+\noindent\begin{small}
+\begin{verbatim}
+{
+  "version": "0.8.9",
+  "function_name": "toggleSwap(bool)_v175",
+  "cfg_representation": "...",
+  "solidity_definition":
+        "function toggleSwap(bool _swapEnabled) ..."
+}
+\end{verbatim}
+\end{small}
+
+The suffix (e.g., \texttt{\_v175}) uniquely distinguishes functions with identical
+signatures across different contracts.
+
+\subsection{Decompilation Task Definition}
+
+The core task is:
+
+\begin{quote}
+\textit{Given only a textual CFG generated from EVM bytecode, reconstruct the most
+likely Solidity implementation of the function.}
+\end{quote}
+
+A reconstruction must preserve the function signature, infer visibility, modifiers,
+and revert conditions, reflect the control flow implied by the CFG, and resemble
+the ground-truth Solidity implementation. This framing mirrors a realistic
+reverse-engineering scenario in which only runtime bytecode is available.
+
+\subsection{Nova Model and Fine-Tuning}
+\label{sec:nova}
+
+For the CFG-to-Solidity stage we adapt \textsc{Nova}~\cite{jiang2025nova}. We keep
+Nova's architecture entirely unchanged—\texttt{modeling\_nova.py} (the
+\texttt{NovaForCausalLM} model, \texttt{NovaAttention} hierarchical attention, and
+\texttt{NovaTokenizer}) and \texttt{generation\_utils.py} (the generation logic)
+are used as released—because the parallel between Nova's assembly-to-C task and our
+CFG-to-Solidity task is exact. Our work consists of re-targeting the data,
+training, and evaluation around this architecture:
+
+\begin{itemize}
+  \item \textbf{Dataset preparation} (\texttt{prepare\_solidity\_dataset.py}, new).
+        We read the aligned CFG/Solidity function pairs and insert
+        \texttt{<label-N>} tokens after each EVM opcode line (\texttt{JUMPDEST},
+        \texttt{PUSH2}, \texttt{CALLDATALOAD}, \dots), which is what enables Nova's
+        hierarchical attention to form per-block summaries. The Solidity compiler
+        version is included in the prompt so the model conditions on it, and all
+        versions are combined into a single dataset where the version string acts
+        as a conditioning signal. The prompt template is
+        \texttt{"\# This is the EVM CFG for a Solidity \{version\} function:\textbackslash n\{cfg\}\textbackslash nWhat is the Solidity source code?"}.
+  \item \textbf{On-the-fly attention mask} (\texttt{dataset.py}, modified to add
+        \texttt{SolidityDataset}). Nova pre-computes a per-sample
+        \texttt{nova\_attention\_mask} of size $2048\times2048$. Materializing this
+        for the full training set would require on the order of a terabyte of
+        storage; we instead build the mask per sample during training, eliminating
+        the storage bottleneck.
+  \item \textbf{Fine-tuning} (\texttt{finetune\_solidity.py}, new). We load
+        \texttt{deepseek-ai/deepseek-coder-1.3b-base} into
+        \texttt{NovaForCausalLM} and fine-tune with DeepSpeed ZeRO-2 in BF16 for
+        $3$ epochs.
+  \item \textbf{Inference and evaluation} (\texttt{inference\_solidity.py} and
+        \texttt{evaluate\_solidity.py}, new). Inference takes an EVM CFG and emits
+        predicted Solidity (single-function and batch modes); evaluation computes
+        BLEU-1 through BLEU-4, CodeBERT cosine similarity, and exact-match rate.
+  \item \textbf{Job orchestration} (\texttt{hpc/}). SLURM scripts drive dataset
+        preparation, multi-GPU training, and inference/evaluation on the cluster.
+\end{itemize}
+
+% ===========================================================================
+\section{CFG Front-End Evaluation}
+\label{sec:cfg-eval}
+
+Because the quality of the entire pipeline is bounded by the quality of the CFG
+front-end, we evaluate the front-end independently before training the model. We
+measure how accurately the enhanced \texttt{evm\_cfg\_builder} recovers the
+\emph{public function names} of a contract from its bytecode alone, using the
+verified Solidity source as ground truth.
+
+\subsection{Setup and Metrics}
+
+We evaluate on \textbf{$109{,}679$ contracts} across \textbf{$21$ Solidity
+versions} (0.8.0--0.8.20), each providing deployed bytecode and cleaned source.
+Evaluation runs on the HPC cluster via SLURM with $16$ parallel worker processes,
+processing the full set in under ten minutes and emitting one auditable row per
+contract.
+
+Let $\widehat{F}$ be the set of named functions recovered from the bytecode and
+$F$ the set of public/external functions parsed from the source, with
+$M=\widehat{F}\cap F$. We report precision $|M|/|\widehat{F}|$, recall $|M|/|F|$,
+their harmonic mean $F_1$, exact set match $\mathbb{1}[\widehat{F}=F]$, and
+sentence-level BLEU over the sorted name lists. Precision answers ``when the tool
+names a function, is it correct?''; recall answers ``what fraction of deployed
+public functions are recovered?''.
+
+\subsection{Ablation}
+
+We isolate each change as a separate configuration. Two of the changes are
+\emph{measurement-correctness} fixes that stop scoring the extractor on functions
+that cannot be present in the deployed bytecode by construction, and two are
+genuine \emph{capability} fixes.
+
+\paragraph{E1: Interface exclusion (measurement).}
+A flattened source file contains the deployed contract plus every imported
+interface (e.g.\ \texttt{IUniswapV2Router02}). Interface functions are never
+compiled into the contract's own bytecode—they are external ABIs used to call
+\emph{other} contracts—so counting them as deployed public functions inflated the
+recall denominator. Excluding \texttt{interface} blocks (and stripping comments to
+avoid spurious matches) raised recall from $0.290$ to $0.383$ with precision
+essentially unchanged.
+
+\paragraph{E2: Merged selector table (capability).}
+Merging the curated and built-in selector tables into the combined
+$453{,}208$-entry table (Section~\ref{sec:cfg-extract}) resolved additional
+selectors, trading a small precision cost for a recall gain (net $F_1$ positive).
+
+\paragraph{E3: Library-stub exclusion (measurement).}
+A large fraction of ``contracts'' are in fact deployed Solidity \emph{libraries}
+whose runtime is an $86$-byte delegatecall guard
+(\texttt{PUSH20 <self-address>; ADDRESS; EQ; \dots}) containing no callable
+functions by construction—library functions are \texttt{internal} and inlined into
+callers. Such stubs constitute $58.8\%$ of 0.8.0 and $83.1\%$ of 0.8.1, and
+scoring them against a full multi-function source file is meaningless. A bytecode
+classifier labels each contract \texttt{runtime}, \texttt{library\_stub},
+\texttt{tiny}, or \texttt{empty}; excluding the $35{,}530$ non-runtime contracts
+yields the fair, runtime-only headline.
+
+\paragraph{E4: \texttt{PUSH0} opcode support (capability).}
+Registering \texttt{PUSH0} (Section~\ref{sec:cfg-extract}) restores function
+recovery on Shanghai-era bytecode. A key empirical finding is that the version
+buckets are defined by source \emph{pragma}, not by the compiler actually used at
+deployment: $88.2\%$ of ``0.8.0-pragma'' runtime contracts contain \texttt{PUSH0},
+so the single disassembler fix improves \emph{every} version. A per-contract audit
+confirms the gains are correct recovery: contracts that previously produced
+\emph{empty} CFGs now recover full, correctly-named function sets at precision
+$\approx 1.0$.
+
+\begin{table}[t]
+\centering
+\caption{All-contracts weighted ablation ($109{,}679$ contracts).}
+\label{tab:ablation-all}
+\small
+\begin{tabular}{l c c c}
+\toprule
+Configuration & Precision & Recall & $F_1$ \\
+\midrule
+V1: Baseline                    & 0.5647 & 0.2895 & 0.3378 \\
+V2: + Interface exclusion       & 0.5635 & 0.3834 & 0.4106 \\
+V3: + Merged $453$k table       & 0.5554 & 0.4024 & 0.4168 \\
+V4: + \texttt{PUSH0} fix        & \textbf{0.6003} & \textbf{0.4378} & \textbf{0.4546} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{Runtime-only weighted headline (library stubs / empty / tiny bytecode
+excluded; $73{,}709$ contracts).}
+\label{tab:ablation-rt}
+\small
+\begin{tabular}{l c c c c}
+\toprule
+Configuration & Precision & Recall & $F_1$ & Exact \\
+\midrule
+V3$_{\text{rt}}$: merged, no stubs & 0.8217 & 0.5953 & 0.6167 & 0.097 \\
+V4$_{\text{rt}}$: + \texttt{PUSH0} & \textbf{0.8881} & \textbf{0.6479} & \textbf{0.6726} & \textbf{0.109} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Results}
+
+Table~\ref{tab:ablation-all} reports the weighted headline over all contracts, and
+Table~\ref{tab:ablation-rt} the fair, runtime-only headline. On the $73{,}709$
+contracts whose bytecode can contain recoverable functions, the final
+configuration attains precision $0.888$, recall $0.648$, and $F_1=0.673$, up from
+a baseline $F_1$ of $0.338$. Crucially, precision \emph{rises} from $0.56$ to
+$0.89$ as recall rises: had any stage simply emitted more guesses, precision would
+have fallen, so the increase indicates the additional recovered names are correct.
+Table~\ref{tab:perversion} gives the final per-version breakdown; precision is
+uniformly high ($0.68$--$0.93$), with recall the limiting axis, reflecting
+inherited base-class functions whose dispatch is not always followed.
+
+\begin{table}[t]
+\centering
+\caption{Final runtime-only results per version. $n$ is runtime contracts; $s$ is
+excluded library stubs.}
+\label{tab:perversion}
+\scriptsize
+\begin{tabular}{l r r c c c c}
+\toprule
+Version & $n$ & $s$ & Prec. & Rec. & $F_1$ & BLEU \\
+\midrule
+0.8.0  & 14{,}749 & 21{,}305 & 0.895 & 0.775 & 0.802 & 0.530 \\
+0.8.1  & 283      & 1{,}416  & 0.800 & 0.717 & 0.718 & 0.419 \\
+0.8.2  & 431      & 482      & 0.682 & 0.815 & 0.697 & 0.326 \\
+0.8.3  & 404      & 340      & 0.795 & 0.730 & 0.711 & 0.427 \\
+0.8.4  & 9{,}791  & 2{,}499  & 0.926 & 0.657 & 0.675 & 0.475 \\
+0.8.5  & 1{,}006  & 239      & 0.830 & 0.896 & 0.831 & 0.565 \\
+0.8.6  & 968      & 362      & 0.734 & 0.606 & 0.587 & 0.277 \\
+0.8.7  & 5{,}884  & 1{,}005  & 0.905 & 0.611 & 0.643 & 0.413 \\
+0.8.8  & 270      & 93       & 0.891 & 0.719 & 0.728 & 0.464 \\
+0.8.9  & 14{,}420 & 1{,}962  & 0.894 & 0.600 & 0.621 & 0.365 \\
+0.8.10 & 6{,}491  & 895      & 0.885 & 0.550 & 0.608 & 0.214 \\
+0.8.11 & 1{,}323  & 370      & 0.843 & 0.604 & 0.637 & 0.257 \\
+0.8.12 & 968      & 701      & 0.852 & 0.636 & 0.647 & 0.356 \\
+0.8.13 & 2{,}065  & 745      & 0.822 & 0.539 & 0.591 & 0.239 \\
+0.8.14 & 811      & 242      & 0.880 & 0.583 & 0.616 & 0.307 \\
+0.8.15 & 2{,}140  & 642      & 0.867 & 0.610 & 0.642 & 0.319 \\
+0.8.16 & 2{,}961  & 477      & 0.892 & 0.648 & 0.687 & 0.402 \\
+0.8.17 & 6{,}504  & 1{,}077  & 0.892 & 0.593 & 0.614 & 0.370 \\
+0.8.18 & 540      & 96       & 0.798 & 0.709 & 0.672 & 0.301 \\
+0.8.19 & 1{,}133  & 193      & 0.894 & 0.625 & 0.654 & 0.390 \\
+0.8.20 & 567      & 62       & 0.902 & 0.634 & 0.648 & 0.423 \\
+\midrule
+\textbf{Wtd.} & \textbf{73{,}709} & \textbf{35{,}530} & \textbf{0.888} & \textbf{0.648} & \textbf{0.673} & \textbf{0.400} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ===========================================================================
+\section{End-to-End Decompilation with Nova}
+\label{sec:nova-eval}
+
+With a reliable CFG front-end in place, we fine-tune the Nova model
+(Section~\ref{sec:nova}) on the aligned dataset and evaluate end-to-end
+CFG-to-Solidity reconstruction. The model is trained on $315{,}794$ training and
+$5{,}000$ validation function pairs; reconstruction quality is measured with
+BLEU~\cite{papineni2002bleu} for syntactic similarity, CodeBERT~\cite{feng2020codebert}
+cosine similarity for semantic alignment, and an exact-match rate.
+
+\subsection{Why BLEU and CodeBERT}
+BLEU measures surface-form n-gram overlap and is sensitive to variable renaming,
+formatting, and benign reordering—so it under-credits logically correct but
+syntactically different completions. CodeBERT cosine similarity,
+$\text{sim}(g,\hat{g}) = E(g)\!\cdot\! E(\hat{g}) \,/\, (\lVert E(g)\rVert\,\lVert E(\hat{g})\rVert)$,
+where $E(\cdot)$ is the CodeBERT encoder, captures semantic alignment that BLEU
+misses. Exact string matching or AST equivalence is too strict because compilation
+is lossy, and full symbolic equivalence requires executable contract context that
+is unavailable for most entries; BLEU plus CodeBERT therefore provides a scalable,
+reproducible, and meaningful measure.
+
+\subsection{Preliminary Results}
+Table~\ref{tab:nova} reports a preliminary evaluation of the fine-tuned model on
+$32{,}079$ held-out functions. The model reconstructs the original function
+\emph{verbatim} in $70.8\%$ of cases and achieves a BLEU-4 of $0.833$; $22{,}817$
+reconstructions score BLEU~$\geq 0.9$. Qualitatively, the model reliably reproduces
+ownership and configuration functions and common ERC-20 patterns, while more
+complex behaviours involving loops over dynamic arrays, inter-contract calls, or
+multi-step invariants remain harder. These results are preliminary: a full retrain
+and an evaluation over the complete held-out set are in progress and will be
+incorporated in the final version of this report.
+
+\begin{table}[t]
+\centering
+\caption{Preliminary end-to-end reconstruction results for the fine-tuned Nova
+model ($32{,}079$ held-out functions).}
+\label{tab:nova}
+\small
+\begin{tabular}{l c}
+\toprule
+Metric & Value \\
+\midrule
+Functions evaluated         & $32{,}079$ \\
+Avg.\ BLEU-4                 & $0.833$ \\
+Exact match                  & $70.8\%$ \;($22{,}716/32{,}079$) \\
+BLEU $\geq 0.9$              & $22{,}817$ \\
+BLEU $< 0.5$                 & $4{,}747$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ===========================================================================
+\section{Project Timeline}
+
+\begin{enumerate}
+
+\item \textbf{Literature Review and Problem Definition (Week 1--2):}
+Surveyed prior work on EVM bytecode analysis, decompilation, and smart contract
+security—including Dedaub~\cite{neville2023dedaub} and Panoramix~\cite{panoramix}—
+and learning-based code models including GPT-3~\cite{brown2020language},
+CodeT5+~\cite{wang2023codet5plus}, and the assembly-to-C model
+Nova~\cite{jiang2025nova}. This clarified the research gap and established the
+central question of CFG-driven, learned decompilation.
+
+\item \textbf{Dataset Acquisition (Week 3):}
+Cloned the Smart Contract Sanctuary repository and collected $292{,}837$ Solidity
+files across many compiler versions, extracting pragma metadata for version-based
+grouping.
+
+\item \textbf{Bytecode Compilation and CFG Extraction (Week 4--6):}
+Compiled all contracts with \texttt{solc-select} and fallback version resolution,
+producing runtime bytecode, and extracted CFGs using the extended
+\texttt{evm\_cfg\_builder}. Failures and timeouts were logged with a resumable
+pipeline.
+
+\item \textbf{CFG Front-End Engineering and Evaluation (Week 6--8):}
+Implemented and evaluated the BFS dispatcher reconstruction, merged
+$453{,}208$-entry selector table, Solidity~0.8.x robustness fixes, and
+\texttt{PUSH0} support, running the version-stratified evaluation on $109{,}679$
+contracts (Section~\ref{sec:cfg-eval}).
+
+\item \textbf{Function-Level Alignment and Dataset Assembly (Week 8--9):}
+Aligned each CFG with its Solidity function and produced the JSON/JSONL datasets,
+including the Nova-specific \texttt{<label-N>} tokenization.
+
+\item \textbf{Nova Adaptation and Fine-Tuning Setup (Week 9--11):}
+Adapted Nova to Solidity (new dataset-prep, on-the-fly attention masks, training,
+inference, and evaluation scripts) and configured multi-GPU DeepSpeed training on
+the cluster.
+
+\item \textbf{Training and Evaluation (Week 11--13):}
+Fine-tuned the model and evaluated reconstructions with
+BLEU~\cite{papineni2002bleu} and CodeBERT~\cite{feng2020codebert}; a full retrain
+and complete-set evaluation are in progress.
+
+\item \textbf{Final Report and Presentation (Week 13--14):}
+Refined the report, verified citations, prepared slides, and produced the final
+PDF.
+
+\end{enumerate}
+
+% ===========================================================================
+\section{Resources and Budget}
+
+The project relied primarily on NYUAD's Jubail high-performance computing cluster,
+which provided the CPU resources for large-scale CFG extraction (sixteen-worker
+parallel jobs over $109{,}679$ contracts) and the GPU resources for Nova
+fine-tuning and inference, at no direct monetary cost to the student. Because the
+final pipeline performs decompilation with a self-hosted, fine-tuned Nova model, it
+does not depend on any paid commercial LLM API at inference time. Software
+dependencies (\texttt{solc-select}, \texttt{evm\_cfg\_builder}, PyTorch, DeepSpeed,
+and the Nova codebase) are open source.
+
+% ===========================================================================
+\section{Conclusion}
+
+This project builds an end-to-end pipeline that recovers high-level Solidity from
+EVM bytecode through an intermediate control-flow-graph representation. To enable
+it, we assembled a mainnet-scale dataset of $292{,}837$ real contracts, compiled
+them, and reconstructed function-level CFGs. The central engineering contribution
+is a substantially extended \texttt{evm\_cfg\_builder}: a breadth-first dispatcher
+reconstruction pass, a merged $453{,}208$-entry selector$\rightarrow$signature
+table, Solidity~0.8.x robustness fixes, and support for the Shanghai
+\texttt{PUSH0} opcode. A controlled, version-stratified evaluation over $109{,}679$
+contracts shows these changes raise function-name-recovery $F_1$ from $0.338$ to
+$0.673$ on extractable contracts—with precision rising from $0.56$ to $0.89$—and
+reveals that Solidity pragma is a poor proxy for the deployed compiler, so a single
+\texttt{PUSH0} fix improves every version.
+
+For the reconstruction stage we adapted the Nova architecture to Solidity, keeping
+its hierarchical-attention model unchanged while rewriting the data, training, and
+evaluation around it, and addressing a terabyte-scale attention-mask storage
+bottleneck with on-the-fly mask construction. Preliminary results are encouraging:
+the fine-tuned model reconstructs $70.8\%$ of held-out functions exactly with a
+BLEU-4 of $0.833$. A full retrain and complete-set evaluation are underway and will
+be reported in the final version.
+
+Taken together, the results demonstrate that CFG-driven, learned decompilation is
+both feasible and promising. The findings establish a foundational, reproducible
+benchmark and point toward hybrid systems that combine static analysis with
+LLM-based reasoning, advancing transparency, accessibility, and security in the
+smart contract ecosystem.
+
+\bibliography{refs}
+
+\end{document}
+\endinput

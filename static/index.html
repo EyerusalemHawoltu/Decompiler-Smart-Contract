@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>EVM Decompiler</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#0d1117;--surface:#161b22;--surface2:#1c2128;--border:#30363d;
+      --accent:#f78166;--accent2:#e3b341;--text:#c9d1d9;--muted:#8b949e;
+      --green:#3fb950;--blue:#58a6ff;
+      --mono:'JetBrains Mono','Fira Code',monospace;
+    }
+    html,body{height:100%;background:var(--bg);color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px}
+    .page{display:flex;flex-direction:column;height:100vh}
+
+    /* ── Header ── */
+    header{background:var(--surface);border-bottom:1px solid var(--border);
+      padding:12px 24px;display:flex;align-items:center;gap:16px;flex-shrink:0}
+    .logo{font-size:18px;font-weight:700;color:#fff;letter-spacing:-.5px}
+    .logo span{color:var(--accent)}
+    .pipe{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+    .pipe b{color:var(--accent2)}
+    .badges{display:flex;gap:8px;margin-left:auto;align-items:center}
+    .badge{background:rgba(247,129,102,.1);color:var(--accent);border:1px solid rgba(247,129,102,.25);
+      border-radius:20px;padding:2px 10px;font-size:11px;font-weight:600}
+    .badge.g{background:rgba(63,185,80,.1);color:var(--green);border-color:rgba(63,185,80,.25)}
+    .badge.y{background:rgba(227,179,65,.1);color:var(--accent2);border-color:rgba(227,179,65,.25)}
+
+    /* ── Steps ── */
+    .steps{background:var(--surface2);border-bottom:1px solid var(--border);
+      padding:0 24px;display:flex;gap:0;flex-shrink:0}
+    .step{padding:10px 20px;font-size:12px;font-weight:600;color:var(--muted);
+      border-bottom:2px solid transparent;display:flex;align-items:center;gap:8px;
+      white-space:nowrap}
+    .step .num{width:20px;height:20px;border-radius:50%;background:var(--border);
+      display:flex;align-items:center;justify-content:center;font-size:11px}
+    .step.active{color:var(--accent);border-bottom-color:var(--accent)}
+    .step.active .num{background:var(--accent);color:#fff}
+    .step.done{color:var(--green)}
+    .step.done .num{background:var(--green);color:#fff}
+    .step-arrow{color:var(--border);font-size:16px;align-self:center}
+
+    /* ── Main 3-column ── */
+    .main{display:grid;grid-template-columns:1fr 1fr 1fr;flex:1;overflow:hidden}
+    .col{display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
+    .col:last-child{border-right:none}
+
+    .col-head{background:var(--surface);border-bottom:1px solid var(--border);
+      padding:10px 14px;font-size:11px;font-weight:700;color:var(--muted);
+      text-transform:uppercase;letter-spacing:.6px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+    .dot{width:7px;height:7px;border-radius:50%;background:var(--border)}
+    .dot.on{background:var(--green)}
+    .dot.wait{background:var(--accent2)}
+
+    .col-body{flex:1;overflow:hidden;position:relative}
+    .col-foot{background:var(--surface);border-top:1px solid var(--border);
+      padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+
+    textarea{width:100%;height:100%;background:var(--bg);color:var(--text);
+      border:none;outline:none;resize:none;font-family:var(--mono);
+      font-size:12.5px;line-height:1.65;padding:14px}
+    textarea::placeholder{color:var(--muted)}
+
+    /* Function list */
+    .fn-list{height:100%;overflow-y:auto;padding:8px}
+    .fn-item{padding:9px 12px;border-radius:7px;cursor:pointer;font-family:var(--mono);
+      font-size:12px;color:var(--text);border:1px solid transparent;margin-bottom:3px;
+      transition:background .1s,border-color .1s}
+    .fn-item:hover{background:var(--surface2)}
+    .fn-item.selected{background:rgba(247,129,102,.1);border-color:rgba(247,129,102,.3);color:var(--accent)}
+    .fn-empty{padding:40px 20px;text-align:center;color:var(--muted);font-size:13px}
+    .fn-empty .icon{font-size:28px;margin-bottom:10px;opacity:.4}
+
+    /* Output */
+    .out-wrap{height:100%;overflow:auto;position:relative}
+    pre[class*="language-"]{margin:0;border-radius:0;background:var(--bg)!important;
+      min-height:100%;font-family:var(--mono)!important;font-size:12.5px;line-height:1.65;padding:14px!important}
+    code[class*="language-"]{font-family:var(--mono)!important}
+    .ph{position:absolute;inset:0;display:flex;flex-direction:column;
+      align-items:center;justify-content:center;gap:10px;color:var(--muted);
+      font-size:13px;pointer-events:none}
+    .ph .icon{font-size:32px;opacity:.35}
+
+    /* Buttons */
+    .btn{border:none;border-radius:7px;padding:7px 18px;font-size:13px;
+      font-weight:600;cursor:pointer;display:flex;align-items:center;gap:7px;
+      transition:opacity .15s,transform .1s;white-space:nowrap}
+    .btn:hover{opacity:.85}
+    .btn:active{transform:scale(.97)}
+    .btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+    .btn-blue{background:var(--blue);color:#fff}
+    .btn-accent{background:var(--accent);color:#fff;margin-left:auto}
+    .btn-ghost{background:rgba(255,255,255,.06);border:1px solid var(--border);
+      color:var(--muted);padding:5px 12px;font-size:11px}
+    .btn-ghost:hover{color:var(--text)}
+    .btn-ghost.copied{color:var(--green)}
+
+    label{font-size:11px;color:var(--muted);white-space:nowrap}
+    input[type="text"]{background:var(--bg);border:1px solid var(--border);
+      border-radius:6px;color:var(--text);padding:5px 9px;font-size:12px;
+      outline:none;font-family:var(--mono);width:72px}
+    input[type="text"]:focus{border-color:var(--accent)}
+    input[type="range"]{accent-color:var(--accent);width:90px}
+    .rval{font-family:var(--mono);font-size:11px;color:var(--accent2);min-width:30px}
+
+    /* Status */
+    .bar{background:var(--surface);border-top:1px solid var(--border);
+      padding:4px 20px;font-size:11px;color:var(--muted);
+      display:flex;align-items:center;gap:16px;flex-shrink:0}
+    #smsg{flex:1}
+    #smsg.err{color:#ff7b72}
+    #smsg.ok{color:var(--green)}
+
+    .spinner{display:inline-block;width:13px;height:13px;
+      border:2px solid rgba(255,255,255,.2);border-top-color:#fff;
+      border-radius:50%;animation:spin .7s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* ── Mode tabs ── */
+    .mode-tabs{display:flex;gap:0;padding:0 24px;background:var(--surface2);
+      border-bottom:1px solid var(--border);flex-shrink:0}
+    .mode-tab{padding:8px 20px;font-size:12px;font-weight:600;color:var(--muted);
+      border-bottom:2px solid transparent;cursor:pointer;transition:color .15s;
+      display:flex;align-items:center;gap:6px}
+    .mode-tab:hover{color:var(--text)}
+    .mode-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+
+    @media(max-width:900px){
+      .main{grid-template-columns:1fr;grid-template-rows:repeat(3,1fr)}
+      .col{border-right:none;border-bottom:1px solid var(--border)}
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">⛓ EVM<span>Decompiler</span></div>
+    <div class="pipe"><b>Bytecode</b> → <b>CFG</b> → <b>Solidity</b></div>
+    <div class="badges">
+      <span class="badge g">BLEU-4: 0.87</span>
+      <span class="badge y">Exact Match: 66%</span>
+      <span class="badge">Nova 1.3B · 256K fns</span>
+    </div>
+  </header>
+
+  <!-- Mode toggle -->
+  <div class="mode-tabs">
+    <div class="mode-tab active" id="tab-bc" onclick="setMode('bytecode')">⛓ Bytecode Mode</div>
+    <div class="mode-tab" id="tab-cfg" onclick="setMode('cfg')">🔗 CFG Mode</div>
+  </div>
+
+  <!-- Step indicators -->
+  <div class="steps" id="steps-bar">
+    <div class="step active" id="s1"><div class="num">1</div> Paste Bytecode</div>
+    <div class="step-arrow">›</div>
+    <div class="step" id="s2"><div class="num">2</div> Select Function</div>
+    <div class="step-arrow">›</div>
+    <div class="step" id="s3"><div class="num">3</div> Decompiled Solidity</div>
+  </div>
+
+  <!-- 3 columns -->
+  <div class="main">
+
+    <!-- COL 1: Bytecode OR CFG input -->
+    <div class="col">
+      <!-- Bytecode mode -->
+      <div id="bc-mode">
+        <div class="col-head"><div class="dot on"></div>Step 1 — EVM Bytecode (hex)</div>
+        <div class="col-body">
+          <textarea id="bc-input" spellcheck="false"
+            placeholder="Paste contract runtime bytecode here…
+
+Example:
+6080604052348015600f57600080fd5b50
+60043610602857...
+
+Tip: get it from Etherscan → Contract → Bytecode
+or: web3.eth.get_code('0x...')"></textarea>
+        </div>
+        <div class="col-foot">
+          <button class="btn btn-blue" id="extract-btn" onclick="extractFunctions()">
+            🔍 Extract Functions
+          </button>
+          <span id="fn-count" style="font-size:11px;color:var(--muted)"></span>
+        </div>
+      </div>
+
+      <!-- CFG mode -->
+      <div id="cfg-mode" style="display:none;display:flex;flex-direction:column;height:100%">
+        <div class="col-head"><div class="dot on"></div>Paste CFG Text Directly</div>
+        <div class="col-body">
+          <textarea id="cfg-input" spellcheck="false"
+            placeholder="Paste evm_cfg_builder CFG text here…
+
+Example:
+Function owner()
+	Attributes:
+		-view
+
+	Basic Blocks:
+	- @0x3b-0x42
+		Instructions:
+		- JUMPDEST
+		- PUSH2
+		- JUMP
+		Incoming basic_block:
+		Outgoing basic_block:
+		- <cfg BasicBlock@0x75-0x9d>"></textarea>
+        </div>
+        <div class="col-foot">
+          <button class="btn btn-accent" id="cfg-decompile-btn" onclick="decompileCfgDirect()">
+            🔓 Decompile CFG
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- COL 2: Function list + CFG preview (bytecode mode) / info (cfg mode) -->
+    <div class="col">
+      <div class="col-head"><div class="dot" id="d2"></div><span id="col2-title">Step 2 — Select Function + CFG</span></div>
+      <div class="col-body" style="display:flex;flex-direction:column;overflow:hidden">
+
+        <!-- Bytecode mode: function list + CFG preview -->
+        <div id="col2-bc" style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+          <!-- Function list (top half) -->
+          <div style="flex:0 0 42%;border-bottom:1px solid var(--border);overflow-y:auto">
+            <div class="fn-list" id="fn-list">
+              <div class="fn-empty"><div class="icon">📋</div>Functions appear here after extraction</div>
+            </div>
+          </div>
+          <!-- CFG preview (bottom half) -->
+          <div style="flex:1;overflow:auto;position:relative">
+            <div class="ph" id="cfg-ph"><div class="icon">🔗</div><div>CFG preview</div></div>
+            <pre style="margin:0;background:var(--bg)!important;min-height:100%;font-family:var(--mono)!important;font-size:11.5px;line-height:1.55;padding:12px!important;overflow:auto"><code id="cfg-preview" class="language-none"></code></pre>
+          </div>
+        </div>
+
+        <!-- CFG mode: info panel -->
+        <div id="col2-cfg" style="display:none;align-items:center;justify-content:center;flex:1;padding:30px;text-align:center">
+          <div>
+            <div style="font-size:36px;opacity:.3;margin-bottom:16px">🔗</div>
+            <div style="color:var(--muted);font-size:13px;line-height:1.7">
+              Paste any <b style="color:var(--text)">evm_cfg_builder</b> formatted CFG on the left<br>
+              and click <b style="color:var(--accent)">Decompile CFG</b> to get Solidity directly.<br><br>
+              <span style="color:var(--blue)">No bytecode needed —</span><br>
+              useful for testing individual functions.
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-foot">
+        <span style="font-size:11px;color:var(--muted)" id="sel-fn-label">No function selected</span>
+        <button class="btn btn-accent" id="decompile-btn" onclick="decompile()" disabled>
+          🔓 Decompile
+        </button>
+      </div>
+    </div>
+
+    <!-- COL 3: Solidity output -->
+    <div class="col">
+      <div class="col-head"><div class="dot" id="d3"></div>Step 3 — Decompiled Solidity</div>
+      <div class="col-body">
+        <div class="out-wrap">
+          <div class="ph" id="sol-ph"><div class="icon">📄</div><div>Output appears here</div></div>
+          <button class="btn btn-ghost" id="copy-btn" onclick="copyOutput()"
+            style="position:absolute;top:10px;right:12px;z-index:10;display:none">Copy</button>
+          <pre><code class="language-javascript" id="sol-out"></code></pre>
+        </div>
+      </div>
+      <div class="col-foot">
+        <label>Version</label>
+        <input type="text" id="ver" value="0.8.9"/>
+        <label style="margin-left:6px">Max tokens</label>
+        <input type="range" id="mtok" min="64" max="1024" step="64" value="512"/>
+        <span class="rval" id="mtokv">512</span>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+
+  <!-- Status bar -->
+  <div class="bar">
+    <span id="smsg">Ready · Nova-Solidity-1.3B · checkpoint-24060</span>
+    <span id="tinfo"></span>
+    <a href="/api/health" target="_blank" style="color:var(--muted);text-decoration:none;font-size:11px">● health</a>
+  </div>
+
+</div><!-- /page -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+<script>
+  // ── State ─────────────────────────────────────────────────────────────────
+  let allCfgs = {};       // { name → cfg_text }
+  let selectedFn = null;
+  let currentMode = 'bytecode';  // 'bytecode' | 'cfg'
+
+  // ── Mode switch ───────────────────────────────────────────────────────────
+  function setMode(mode) {
+    currentMode = mode;
+    const isBc = mode === 'bytecode';
+
+    document.getElementById('tab-bc').classList.toggle('active', isBc);
+    document.getElementById('tab-cfg').classList.toggle('active', !isBc);
+    document.getElementById('steps-bar').style.display = isBc ? '' : 'none';
+
+    // Col 1
+    document.getElementById('bc-mode').style.display = isBc ? 'flex' : 'none';
+    document.getElementById('bc-mode').style.flexDirection = 'column';
+    document.getElementById('bc-mode').style.height = '100%';
+    document.getElementById('cfg-mode').style.display = isBc ? 'none' : 'flex';
+
+    // Col 2
+    document.getElementById('col2-bc').style.display  = isBc ? 'flex' : 'none';
+    document.getElementById('col2-cfg').style.display = isBc ? 'none' : 'flex';
+    document.getElementById('col2-title').textContent = isBc
+      ? 'Step 2 — Select Function + CFG'
+      : 'CFG Direct Mode';
+
+    // Reset output
+    solOut.textContent = '';
+    solPh.style.display = 'flex';
+    copyBtn.style.display = 'none';
+    tinfo.textContent = '';
+    document.getElementById('d3').className = 'dot';
+    status(isBc
+      ? 'Ready · Bytecode mode — paste hex and extract functions'
+      : 'Ready · CFG mode — paste CFG text and decompile directly', '');
+  }
+
+  const bcInput    = document.getElementById('bc-input');
+  const fnList     = document.getElementById('fn-list');
+  const cfgPreview = document.getElementById('cfg-preview');
+  const cfgPh      = document.getElementById('cfg-ph');
+  const solOut     = document.getElementById('sol-out');
+  const solPh      = document.getElementById('sol-ph');
+  const decompBtn  = document.getElementById('decompile-btn');
+  const copyBtn    = document.getElementById('copy-btn');
+  const smsg       = document.getElementById('smsg');
+  const tinfo      = document.getElementById('tinfo');
+  const mtok       = document.getElementById('mtok');
+  const mtokv      = document.getElementById('mtokv');
+  const selLabel   = document.getElementById('sel-fn-label');
+
+  mtok.addEventListener('input', () => { mtokv.textContent = mtok.value; });
+
+  // ── Step indicators ────────────────────────────────────────────────────────
+  function setStep(n) {
+    [1,2,3].forEach(i => {
+      const el = document.getElementById('s'+i);
+      el.classList.remove('active','done');
+      if (i < n)  el.classList.add('done');
+      if (i === n) el.classList.add('active');
+    });
+  }
+
+  // ── Step 1 → 2: Extract Functions ─────────────────────────────────────────
+  async function extractFunctions() {
+    const bytecode = bcInput.value.trim();
+    if (!bytecode) { status('⚠️  Paste bytecode first.','err'); return; }
+
+    const btn = document.getElementById('extract-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Extracting…';
+    status('Analysing bytecode with evm_cfg_builder…','');
+    document.getElementById('fn-count').textContent = '';
+
+    // Reset step 2 & 3
+    fnList.innerHTML = '<div class="fn-empty"><div class="icon">⏳</div><div>Extracting…</div></div>';
+    cfgPreview.textContent = '';
+    cfgPh.style.display = 'flex';
+    solOut.textContent = '';
+    solPh.style.display = 'flex';
+    copyBtn.style.display = 'none';
+    decompBtn.disabled = true;
+    selectedFn = null;
+    selLabel.textContent = 'No function selected';
+    document.getElementById('d2').className = 'dot wait';
+    document.getElementById('d3').className = 'dot';
+
+    try {
+      const res = await fetch('/api/list_functions', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ bytecode }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+
+      allCfgs = data.cfgs;
+      const names = data.functions;
+      document.getElementById('fn-count').textContent = `${names.length} function${names.length!==1?'s':''} found`;
+
+      if (names.length === 0) {
+        fnList.innerHTML = '<div class="fn-empty"><div class="icon">😕</div><div>No functions found</div></div>';
+        status('No functions found in bytecode.','err');
+      } else {
+        fnList.innerHTML = '';
+        names.forEach(name => {
+          const div = document.createElement('div');
+          div.className = 'fn-item';
+          div.textContent = name;
+          div.onclick = () => selectFunction(name, div);
+          fnList.appendChild(div);
+        });
+        status(`✅ Found ${names.length} function(s). Select one to preview its CFG.`, 'ok');
+        setStep(2);
+        document.getElementById('d2').className = 'dot on';
+      }
+    } catch(e) {
+      fnList.innerHTML = `<div class="fn-empty"><div class="icon">❌</div><div>${e.message}</div></div>`;
+      status(`❌ ${e.message}`, 'err');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '🔍 Extract Functions';
+    }
+  }
+
+  // ── Step 2: Select function → show CFG ────────────────────────────────────
+  function selectFunction(name, el) {
+    // Deselect previous
+    document.querySelectorAll('.fn-item').forEach(d => d.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedFn = name;
+    selLabel.textContent = name;
+    decompBtn.disabled = false;
+
+    // Show CFG preview
+    const cfg = allCfgs[name] || '';
+    cfgPreview.textContent = cfg;
+    cfgPh.style.display = 'none';
+
+    // Reset step 3
+    solOut.textContent = '';
+    solPh.style.display = 'flex';
+    copyBtn.style.display = 'none';
+    document.getElementById('d3').className = 'dot';
+    tinfo.textContent = '';
+  }
+
+  // ── Step 3: Decompile ──────────────────────────────────────────────────────
+  async function decompile() {
+    if (!selectedFn || !allCfgs[selectedFn]) {
+      status('⚠️  Select a function first.','err'); return;
+    }
+
+    decompBtn.disabled = true;
+    decompBtn.innerHTML = '<span class="spinner"></span> Decompiling…';
+    status('Running Nova inference… (1–3 min on CPU)','');
+    solOut.textContent = '';
+    solPh.style.display = 'flex';
+    copyBtn.style.display = 'none';
+    document.getElementById('d3').className = 'dot wait';
+    tinfo.textContent = '';
+
+    const t0 = Date.now();
+    try {
+      const res = await fetch('/api/decompile', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          cfg: allCfgs[selectedFn],
+          version: document.getElementById('ver').value || '0.8.9',
+          max_tokens: parseInt(mtok.value),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+
+      const elapsed = ((Date.now()-t0)/1000).toFixed(1);
+      solOut.textContent = data.solidity;
+      Prism.highlightElement(solOut);
+      solPh.style.display = 'none';
+      copyBtn.style.display = 'block';
+      copyBtn.textContent = 'Copy';
+      copyBtn.classList.remove('copied');
+      document.getElementById('d3').className = 'dot on';
+      setStep(3);
+      status(`✅ Done in ${elapsed}s`, 'ok');
+      tinfo.textContent = `Input: ${data.input_tokens} tokens`;
+
+    } catch(e) {
+      document.getElementById('d3').className = 'dot';
+      status(`❌ ${e.message}`, 'err');
+    } finally {
+      decompBtn.disabled = false;
+      decompBtn.innerHTML = '🔓 Decompile';
+    }
+  }
+
+  // ── Copy ──────────────────────────────────────────────────────────────────
+  function copyOutput() {
+    navigator.clipboard.writeText(solOut.textContent).then(() => {
+      copyBtn.textContent = 'Copied!';
+      copyBtn.classList.add('copied');
+      setTimeout(() => { copyBtn.textContent='Copy'; copyBtn.classList.remove('copied'); }, 2000);
+    });
+  }
+
+  // ── CFG direct decompile ──────────────────────────────────────────────────
+  async function decompileCfgDirect() {
+    const cfgText = document.getElementById('cfg-input').value.trim();
+    if (!cfgText) { status('⚠️  Paste a CFG first.', 'err'); return; }
+
+    const btn = document.getElementById('cfg-decompile-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Decompiling…';
+    status('Running Nova inference…', '');
+    solOut.textContent = '';
+    solPh.style.display = 'flex';
+    copyBtn.style.display = 'none';
+    document.getElementById('d3').className = 'dot wait';
+    tinfo.textContent = '';
+
+    const t0 = Date.now();
+    try {
+      const res = await fetch('/api/decompile', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          cfg: cfgText,
+          version: document.getElementById('ver').value || '0.8.9',
+          max_tokens: parseInt(mtok.value),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+
+      const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+      solOut.textContent = data.solidity;
+      Prism.highlightElement(solOut);
+      solPh.style.display = 'none';
+      copyBtn.style.display = 'block';
+      copyBtn.textContent = 'Copy';
+      copyBtn.classList.remove('copied');
+      document.getElementById('d3').className = 'dot on';
+      status(`✅ Done in ${elapsed}s`, 'ok');
+      tinfo.textContent = `Input: ${data.input_tokens} tokens`;
+    } catch(e) {
+      document.getElementById('d3').className = 'dot';
+      status(`❌ ${e.message}`, 'err');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '🔓 Decompile CFG';
+    }
+  }
+
+  function status(msg, cls) { smsg.textContent=msg; smsg.className=cls; }
+
+  // Keyboard shortcut
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey||e.metaKey) && e.key==='Enter') {
+      if (currentMode === 'cfg') { decompileCfgDirect(); return; }
+      if (!decompBtn.disabled) decompile();
+      else extractFunctions();
+    }
+  });
+</script>
+</body>
+</html>

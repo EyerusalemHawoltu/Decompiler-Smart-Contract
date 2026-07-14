@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Nova Evaluation — EVM Decompiler</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#0d1117;--surface:#161b22;--surface2:#1c2128;--border:#30363d;
+      --accent:#f78166;--accent2:#e3b341;--text:#c9d1d9;--muted:#8b949e;
+      --green:#3fb950;--blue:#58a6ff;--red:#ff7b72;
+      --mono:'JetBrains Mono','Fira Code',monospace;
+    }
+    html,body{background:var(--bg);color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;min-height:100vh}
+
+    header{background:var(--surface);border-bottom:1px solid var(--border);
+      padding:12px 24px;display:flex;align-items:center;gap:16px}
+    .logo{font-size:18px;font-weight:700;color:#fff}
+    .logo span{color:var(--accent)}
+    .nav-link{color:var(--muted);text-decoration:none;font-size:13px;padding:4px 10px;
+      border-radius:6px;transition:background .15s}
+    .nav-link:hover{background:var(--surface2);color:var(--text)}
+    .nav-link.active{color:var(--blue)}
+
+    .container{max-width:1400px;margin:0 auto;padding:24px}
+
+    /* Summary cards */
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px}
+    .card-val{font-size:28px;font-weight:700;color:#fff;margin-bottom:4px}
+    .card-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+    .card.green .card-val{color:var(--green)}
+    .card.blue  .card-val{color:var(--blue)}
+    .card.yellow .card-val{color:var(--accent2)}
+    .card.red   .card-val{color:var(--red)}
+
+    /* Filter bar */
+    .filter-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+      background:var(--surface);border:1px solid var(--border);border-radius:10px;
+      padding:12px 16px;margin-bottom:16px}
+    .filter-bar label{font-size:12px;color:var(--muted)}
+    input[type="text"],select{background:var(--bg);border:1px solid var(--border);
+      border-radius:6px;color:var(--text);padding:6px 10px;font-size:12px;outline:none}
+    input[type="text"]:focus,select:focus{border-color:var(--blue)}
+    input[type="text"]{width:220px}
+    .filter-chip{background:rgba(88,166,255,.1);color:var(--blue);border:1px solid rgba(88,166,255,.25);
+      border-radius:20px;padding:3px 12px;font-size:11px;font-weight:600;cursor:pointer}
+    .filter-chip.active{background:var(--blue);color:#fff}
+    #result-count{font-size:12px;color:var(--muted);margin-left:auto}
+
+    /* Table */
+    .tbl-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+    table{width:100%;border-collapse:collapse}
+    thead th{background:var(--surface2);padding:10px 12px;text-align:left;
+      font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;
+      letter-spacing:.5px;border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer}
+    thead th:hover{color:var(--text)}
+    thead th.sorted{color:var(--blue)}
+    tbody tr{border-bottom:1px solid var(--border);transition:background .1s;cursor:pointer}
+    tbody tr:last-child{border-bottom:none}
+    tbody tr:hover{background:var(--surface2)}
+    tbody tr.expanded{background:var(--surface2)}
+    td{padding:9px 12px;font-size:12px;vertical-align:middle}
+    .fn-name{font-family:var(--mono);color:var(--text);font-size:11.5px}
+    .score-bar{display:flex;align-items:center;gap:8px}
+    .bar-bg{flex:1;height:5px;background:var(--border);border-radius:3px;max-width:80px}
+    .bar-fill{height:100%;border-radius:3px;transition:width .3s}
+    .score-num{font-family:var(--mono);font-size:11px;min-width:32px;text-align:right}
+    .badge-exact{background:rgba(63,185,80,.15);color:var(--green);border:1px solid rgba(63,185,80,.3);
+      border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700}
+    .badge-no{background:rgba(255,123,114,.08);color:var(--red);border:1px solid rgba(255,123,114,.2);
+      border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700}
+    .expand-icon{color:var(--muted);font-size:12px;transition:transform .2s}
+    tr.expanded .expand-icon{transform:rotate(90deg)}
+
+    /* Expanded detail row */
+    .detail-row{display:none}
+    .detail-row.open{display:table-row}
+    .detail-row td{padding:0;background:var(--bg)}
+    .detail-inner{padding:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+    .code-panel{border:1px solid var(--border);border-radius:8px;overflow:hidden}
+    .code-panel-head{background:var(--surface2);padding:7px 12px;font-size:11px;
+      font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;
+      display:flex;align-items:center;justify-content:space-between}
+    .code-panel pre{margin:0;background:var(--bg)!important;font-size:11px!important;
+      line-height:1.5;padding:10px!important;max-height:300px;overflow:auto}
+    .diff-match{color:var(--green)}
+    .diff-miss{color:var(--red)}
+    .bleu-badge{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px}
+
+    .spinner{display:inline-block;width:20px;height:20px;border:2px solid rgba(255,255,255,.15);
+      border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .loading{display:flex;align-items:center;justify-content:center;padding:60px;gap:12px;
+      color:var(--muted)}
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">⛓ EVM<span>Decompiler</span></div>
+  <a class="nav-link" href="/">🔍 Decompiler</a>
+  <a class="nav-link active" href="/eval.html">📊 Evaluation</a>
+</header>
+
+<div class="container">
+
+  <!-- Summary cards -->
+  <div class="cards" id="cards">
+    <div class="loading"><span class="spinner"></span> Loading results…</div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <label>Search</label>
+    <input type="text" id="search" placeholder="function name…" oninput="applyFilters()"/>
+    <label>Filter</label>
+    <span class="filter-chip active" data-filter="all"    onclick="setFilter(this,'all')">All</span>
+    <span class="filter-chip"       data-filter="exact"  onclick="setFilter(this,'exact')">Exact Match</span>
+    <span class="filter-chip"       data-filter="near"   onclick="setFilter(this,'near')">BLEU ≥ 0.9</span>
+    <span class="filter-chip"       data-filter="poor"   onclick="setFilter(this,'poor')">BLEU &lt; 0.5</span>
+    <span id="result-count"></span>
+  </div>
+
+  <!-- Table -->
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:32px"></th>
+          <th onclick="sortBy('name')"       id="th-name">Function</th>
+          <th onclick="sortBy('bleu4')"      id="th-bleu4">BLEU-4 ▾</th>
+          <th onclick="sortBy('codebert_sim')" id="th-cb">CodeBERT Sim</th>
+          <th onclick="sortBy('exact_match')" id="th-em">Exact Match</th>
+        </tr>
+      </thead>
+      <tbody id="tbl-body">
+        <tr><td colspan="5" style="padding:40px;text-align:center;color:var(--muted)">
+          <span class="spinner"></span>
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+<script>
+  let allRows    = [];
+  let filtered   = [];
+  let sortKey    = 'bleu4';
+  let sortAsc    = false;
+  let activeFilter = 'all';
+  let expandedIdx  = null;
+
+  // ── Load data ─────────────────────────────────────────────────────────────
+  async function load() {
+    try {
+      const res  = await fetch('/eval_results.json');
+      if (!res.ok) throw new Error('eval_results.json not found');
+      const data = await res.json();
+      renderCards(data.summary);
+      allRows = data.results;
+      applyFilters();
+    } catch(e) {
+      document.getElementById('cards').innerHTML =
+        `<div style="color:var(--red);padding:20px">❌ ${e.message}<br>
+         <small>Run <code>python build_eval.py</code> on HPC first.</small></div>`;
+      document.getElementById('tbl-body').innerHTML =
+        `<tr><td colspan="5" style="padding:20px;color:var(--muted)">No data available.</td></tr>`;
+    }
+  }
+
+  // ── Cards ─────────────────────────────────────────────────────────────────
+  function renderCards(s) {
+    document.getElementById('cards').innerHTML = `
+      <div class="card blue">
+        <div class="card-val">${s.total}</div>
+        <div class="card-lbl">Test Samples</div>
+      </div>
+      <div class="card green">
+        <div class="card-val">${s.avg_bleu4}</div>
+        <div class="card-lbl">Avg BLEU-4</div>
+      </div>
+      <div class="card yellow">
+        <div class="card-val">${s.exact_match_pct}%</div>
+        <div class="card-lbl">Exact Match</div>
+      </div>
+      <div class="card green">
+        <div class="card-val">${s.avg_codebert}</div>
+        <div class="card-lbl">Avg CodeBERT</div>
+      </div>
+      <div class="card blue">
+        <div class="card-val">${s.bleu4_gte_09}</div>
+        <div class="card-lbl">BLEU ≥ 0.9</div>
+      </div>
+      <div class="card red">
+        <div class="card-val">${s.bleu4_lt_05}</div>
+        <div class="card-lbl">BLEU &lt; 0.5</div>
+      </div>
+    `;
+  }
+
+  // ── Filters & sort ────────────────────────────────────────────────────────
+  function setFilter(el, f) {
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    activeFilter = f;
+    applyFilters();
+  }
+
+  function applyFilters() {
+    const q = document.getElementById('search').value.toLowerCase();
+    filtered = allRows.filter(r => {
+      if (q && !r.name.toLowerCase().includes(q)) return false;
+      if (activeFilter === 'exact' && !r.exact_match)  return false;
+      if (activeFilter === 'near'  && r.bleu4 < 0.9)   return false;
+      if (activeFilter === 'poor'  && r.bleu4 >= 0.5)  return false;
+      return true;
+    });
+    sortRows();
+  }
+
+  function sortBy(key) {
+    if (sortKey === key) sortAsc = !sortAsc;
+    else { sortKey = key; sortAsc = false; }
+    document.querySelectorAll('thead th').forEach(th => th.classList.remove('sorted'));
+    const th = document.getElementById('th-' + key.replace('_sim','').replace('_match','m'));
+    if (th) th.classList.add('sorted');
+    sortRows();
+  }
+
+  function sortRows() {
+    filtered.sort((a, b) => {
+      let va = a[sortKey], vb = b[sortKey];
+      if (typeof va === 'string') return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+      return sortAsc ? va - vb : vb - va;
+    });
+    render();
+  }
+
+  // ── Render table ──────────────────────────────────────────────────────────
+  function scoreColor(v) {
+    if (v >= 0.9) return 'var(--green)';
+    if (v >= 0.7) return 'var(--accent2)';
+    if (v >= 0.5) return 'var(--blue)';
+    return 'var(--red)';
+  }
+
+  function scoreBar(v) {
+    const pct = Math.round(v * 100);
+    return `<div class="score-bar">
+      <div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${scoreColor(v)}"></div></div>
+      <span class="score-num" style="color:${scoreColor(v)}">${v.toFixed(3)}</span>
+    </div>`;
+  }
+
+  function render() {
+    document.getElementById('result-count').textContent =
+      `${filtered.length} / ${allRows.length} results`;
+
+    const tbody = document.getElementById('tbl-body');
+    if (!filtered.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:30px;text-align:center;color:var(--muted)">No results match the filter.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = filtered.map((r, i) => `
+      <tr onclick="toggle(${i})" id="row-${i}">
+        <td><span class="expand-icon">›</span></td>
+        <td><span class="fn-name">${escHtml(r.name)}</span></td>
+        <td>${scoreBar(r.bleu4)}</td>
+        <td>${scoreBar(r.codebert_sim)}</td>
+        <td>${r.exact_match
+          ? '<span class="badge-exact">✓ Exact</span>'
+          : '<span class="badge-no">✗ No</span>'}</td>
+      </tr>
+      <tr class="detail-row" id="detail-${i}">
+        <td colspan="5">
+          <div class="detail-inner">
+            <div class="code-panel">
+              <div class="code-panel-head">
+                <span>📥 CFG Input</span>
+              </div>
+              <pre><code class="language-none" style="font-size:10.5px">${escHtml(r.cfg)}</code></pre>
+            </div>
+            <div class="code-panel">
+              <div class="code-panel-head">
+                <span>🤖 Predicted</span>
+                <span class="bleu-badge" style="background:${scoreColor(r.bleu4)}22;color:${scoreColor(r.bleu4)};border:1px solid ${scoreColor(r.bleu4)}44">BLEU ${r.bleu4.toFixed(3)}</span>
+              </div>
+              <pre><code class="language-javascript" id="pred-${i}">${escHtml(r.predicted)}</code></pre>
+            </div>
+            <div class="code-panel">
+              <div class="code-panel-head">
+                <span>✅ Ground Truth</span>
+                ${r.exact_match ? '<span class="badge-exact">Exact Match</span>' : ''}
+              </div>
+              <pre><code class="language-javascript" id="gt-${i}">${escHtml(r.ground_truth)}</code></pre>
+            </div>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  // ── Expand/collapse ───────────────────────────────────────────────────────
+  function toggle(i) {
+    const detail = document.getElementById('detail-' + i);
+    const row    = document.getElementById('row-'    + i);
+    const isOpen = detail.classList.contains('open');
+
+    // close previous
+    if (expandedIdx !== null && expandedIdx !== i) {
+      document.getElementById('detail-' + expandedIdx)?.classList.remove('open');
+      document.getElementById('row-'    + expandedIdx)?.classList.remove('expanded');
+    }
+
+    if (isOpen) {
+      detail.classList.remove('open');
+      row.classList.remove('expanded');
+      expandedIdx = null;
+    } else {
+      detail.classList.add('open');
+      row.classList.add('expanded');
+      expandedIdx = i;
+      // Syntax highlight on first open
+      const p = document.getElementById('pred-' + i);
+      const g = document.getElementById('gt-'   + i);
+      if (p) Prism.highlightElement(p);
+      if (g) Prism.highlightElement(g);
+    }
+  }
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;');
+  }
+
+  load();
+</script>
+</body>
+</html>

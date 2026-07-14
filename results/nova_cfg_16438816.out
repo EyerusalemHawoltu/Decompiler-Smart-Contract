@@ -1,0 +1,35 @@
+START
+Sun Jun 28 20:23:46 +04 2026
+cn271
+Vocabulary size: 32280
+Parameters: 1,346,570,240
+Train: 22735 | Valid: 7578
+Starting full fine-tuning ...
+Fresh start (no prior checkpoint)
+{'loss': 4.2867, 'grad_norm': 9.3125, 'learning_rate': 4.000000000000001e-06, 'epoch': 0.14}
+{'loss': 0.6322, 'grad_norm': 3.796875, 'learning_rate': 8.000000000000001e-06, 'epoch': 0.28}
+{'loss': 0.5157, 'grad_norm': 1.7890625, 'learning_rate': 1.2e-05, 'epoch': 0.42}
+{'loss': 0.4665, 'grad_norm': 4.625, 'learning_rate': 1.6000000000000003e-05, 'epoch': 0.56}
+{'loss': 0.4625, 'grad_norm': 4.21875, 'learning_rate': 2e-05, 'epoch': 0.7}
+{'loss': 0.4223, 'grad_norm': 1.640625, 'learning_rate': 1.981483891060348e-05, 'epoch': 0.84}
+{'loss': 0.4229, 'grad_norm': 0.9921875, 'learning_rate': 1.9266212568219223e-05, 'epoch': 0.99}
+{'loss': 0.4232, 'grad_norm': 1.4296875, 'learning_rate': 1.8374437823092726e-05, 'epoch': 1.13}
+{'loss': 0.3807, 'grad_norm': 1.328125, 'learning_rate': 1.717253907188477e-05, 'epoch': 1.27}
+{'loss': 0.3704, 'grad_norm': 1.8359375, 'learning_rate': 1.570502529101896e-05, 'epoch': 1.41}
+{'eval_loss': 0.38955745100975037, 'eval_runtime': 182.2676, 'eval_samples_per_second': 41.576, 'eval_steps_per_second': 5.201, 'epoch': 1.41}
+{'loss': 0.3844, 'grad_norm': 1.96875, 'learning_rate': 1.4026241770569198e-05, 'epoch': 1.55}
+{'loss': 0.3767, 'grad_norm': 1.109375, 'learning_rate': 1.2198357587636958e-05, 'epoch': 1.69}
+{'loss': 0.3816, 'grad_norm': 1.6171875, 'learning_rate': 1.0289063347542727e-05, 'epoch': 1.83}
+{'loss': 0.3571, 'grad_norm': 1.3046875, 'learning_rate': 8.369064450581374e-06, 'epoch': 1.97}
+{'loss': 0.3514, 'grad_norm': 1.0625, 'learning_rate': 6.509462714233194e-06, 'epoch': 2.11}
+{'loss': 0.3635, 'grad_norm': 1.546875, 'learning_rate': 4.779123315167362e-06, 'epoch': 2.25}
+{'loss': 0.3607, 'grad_norm': 2.296875, 'learning_rate': 3.242124559015234e-06, 'epoch': 2.39}
+{'loss': 0.3687, 'grad_norm': 2.53125, 'learning_rate': 1.9553849185948514e-06, 'epoch': 2.53}
+{'loss': 0.3579, 'grad_norm': 1.3828125, 'learning_rate': 9.665552166241965e-07, 'epoch': 2.67}
+{'loss': 0.3433, 'grad_norm': 0.83203125, 'learning_rate': 3.122540100721794e-07, 'epoch': 2.81}
+{'eval_loss': 0.3773183226585388, 'eval_runtime': 182.3883, 'eval_samples_per_second': 41.549, 'eval_steps_per_second': 5.198, 'epoch': 2.81}
+{'loss': 0.3458, 'grad_norm': 1.53125, 'learning_rate': 1.671152377852092e-08, 'epoch': 2.96}
+{'train_runtime': 6815.7908, 'train_samples_per_second': 10.007, 'train_steps_per_second': 0.313, 'train_loss': 0.5862367012131382, 'epoch': 3.0}
+Done. Checkpoints saved to /scratch/eh3115/Decompliler/Decompliler/checkpoints/nova-cfg-1.3b
+END
+Sun Jun 28 22:17:56 +04 2026

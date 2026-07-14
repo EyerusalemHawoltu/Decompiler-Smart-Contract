@@ -1,0 +1,13 @@
+JOB START
+Tue Jun 16 16:46:40 +04 2026
+cn270
+Checkpoint: /scratch/eh3115/Decompliler/Decompliler/checkpoints/nova-solidity-1.3b-clean/checkpoint-1467
+[eval] loading test set from /scratch/eh3115/Decompliler/Decompliler/data-tokenized/test_set.json
+[eval] 5214 test samples
+[eval] resuming — 5214 already done
+[eval] 0 remaining
+[eval] all done! Rebuilding scores CSV...
+[eval] scores written to /scratch/eh3115/Decompliler/Decompliler/results/full_scores_clean.csv
+[eval] full table written to /scratch/eh3115/Decompliler/Decompliler/results/full_scores_clean_table.csv
+JOB END
+Tue Jun 16 16:46:44 +04 2026

@@ -13,10 +13,10 @@
     },
     "zero_force_ds_cpu_optimizer": false,
     "zero_allow_untested_optimizer": true,
-    "gradient_accumulation_steps": 32,
+    "gradient_accumulation_steps": 4,
     "gradient_clipping": 1,
-    "steps_per_print": 10000,
-    "train_batch_size": 256,
-    "train_micro_batch_size_per_gpu": 1,
+    "steps_per_print": 100,
+    "train_batch_size": 128,
+    "train_micro_batch_size_per_gpu": 8,
     "wall_clock_breakdown": false
 }

@@ -1,0 +1,10 @@
+===== JOB START =====
+Tue Jun  9 14:53:55 +04 2026
+cn270
+Bytecode versions : 23
+Solidity versions : 23
+Total hex files   : 109679
+Contracts to evaluate : 109679
+Workers               : 16
+Output directory      : /scratch/eh3115/Decompliler/Decompliler/results/cfg_eval
+

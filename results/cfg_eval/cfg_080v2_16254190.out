@@ -1,0 +1,72 @@
+=== JOB START ===
+Wed Jun 10 09:38:06 +04 2026
+cn271
+Contracts to evaluate : 36257
+Workers               : 16
+Output directory      : /scratch/eh3115/Decompliler/Decompliler/results/cfg_eval
+
+  [   1000/36257]  P=0.245  R=0.189  F1=0.203  BLEU=0.129  ok=995 err=2  578/s  ETA 1.0min
+  [   2000/36257]  P=0.258  R=0.196  F1=0.212  BLEU=0.133  ok=1987 err=3  677/s  ETA 0.8min
+  [   3000/36257]  P=0.251  R=0.191  F1=0.206  BLEU=0.128  ok=2985 err=3  743/s  ETA 0.7min
+  [   4000/36257]  P=0.255  R=0.194  F1=0.209  BLEU=0.131  ok=3981 err=5  760/s  ETA 0.7min
+  [   5000/36257]  P=0.257  R=0.195  F1=0.211  BLEU=0.131  ok=4973 err=6  769/s  ETA 0.7min
+  [   6000/36257]  P=0.256  R=0.193  F1=0.209  BLEU=0.128  ok=5971 err=8  764/s  ETA 0.7min
+  [   7000/36257]  P=0.255  R=0.191  F1=0.207  BLEU=0.126  ok=6970 err=8  773/s  ETA 0.6min
+  [   8000/36257]  P=0.256  R=0.191  F1=0.207  BLEU=0.126  ok=7967 err=8  781/s  ETA 0.6min
+  [   9000/36257]  P=0.257  R=0.192  F1=0.208  BLEU=0.126  ok=8963 err=8  784/s  ETA 0.6min
+  [  10000/36257]  P=0.256  R=0.192  F1=0.208  BLEU=0.126  ok=9958 err=8  789/s  ETA 0.6min
+  [  11000/36257]  P=0.256  R=0.192  F1=0.208  BLEU=0.127  ok=10955 err=10  786/s  ETA 0.5min
+  [  12000/36257]  P=0.256  R=0.191  F1=0.208  BLEU=0.126  ok=11951 err=13  777/s  ETA 0.5min
+  [  13000/36257]  P=0.256  R=0.191  F1=0.207  BLEU=0.126  ok=12940 err=15  777/s  ETA 0.5min
+  [  14000/36257]  P=0.258  R=0.193  F1=0.210  BLEU=0.127  ok=13936 err=18  777/s  ETA 0.5min
+  [  15000/36257]  P=0.258  R=0.193  F1=0.209  BLEU=0.127  ok=14934 err=19  782/s  ETA 0.5min
+  [  16000/36257]  P=0.259  R=0.194  F1=0.210  BLEU=0.127  ok=15927 err=20  786/s  ETA 0.4min
+  [  17000/36257]  P=0.260  R=0.195  F1=0.211  BLEU=0.128  ok=16918 err=26  786/s  ETA 0.4min
+  [  18000/36257]  P=0.260  R=0.195  F1=0.211  BLEU=0.128  ok=17915 err=27  786/s  ETA 0.4min
+  [  19000/36257]  P=0.261  R=0.195  F1=0.212  BLEU=0.128  ok=18907 err=29  786/s  ETA 0.4min
+  [  20000/36257]  P=0.260  R=0.194  F1=0.211  BLEU=0.128  ok=19902 err=31  788/s  ETA 0.3min
+  [  21000/36257]  P=0.260  R=0.195  F1=0.211  BLEU=0.128  ok=20898 err=33  785/s  ETA 0.3min
+  [  22000/36257]  P=0.259  R=0.193  F1=0.210  BLEU=0.127  ok=21893 err=34  787/s  ETA 0.3min
+  [  23000/36257]  P=0.258  R=0.193  F1=0.210  BLEU=0.127  ok=22888 err=35  791/s  ETA 0.3min
+  [  24000/36257]  P=0.257  R=0.192  F1=0.209  BLEU=0.127  ok=23886 err=35  792/s  ETA 0.3min
+  [  25000/36257]  P=0.261  R=0.195  F1=0.212  BLEU=0.129  ok=24880 err=36  791/s  ETA 0.2min
+  [  26000/36257]  P=0.265  R=0.199  F1=0.216  BLEU=0.131  ok=25876 err=37  789/s  ETA 0.2min
+  [  27000/36257]  P=0.266  R=0.199  F1=0.216  BLEU=0.131  ok=26873 err=39  785/s  ETA 0.2min
+  [  28000/36257]  P=0.265  R=0.199  F1=0.216  BLEU=0.131  ok=27872 err=40  785/s  ETA 0.2min
+  [  29000/36257]  P=0.263  R=0.198  F1=0.215  BLEU=0.131  ok=28867 err=44  787/s  ETA 0.2min
+  [  30000/36257]  P=0.262  R=0.197  F1=0.214  BLEU=0.130  ok=29862 err=45  787/s  ETA 0.1min
+  [  31000/36257]  P=0.262  R=0.197  F1=0.213  BLEU=0.130  ok=30856 err=45  786/s  ETA 0.1min
+  [  32000/36257]  P=0.261  R=0.196  F1=0.213  BLEU=0.129  ok=31853 err=47  786/s  ETA 0.1min
+  [  33000/36257]  P=0.260  R=0.195  F1=0.212  BLEU=0.129  ok=32849 err=51  787/s  ETA 0.1min
+  [  34000/36257]  P=0.259  R=0.195  F1=0.211  BLEU=0.128  ok=33848 err=52  789/s  ETA 0.0min
+  [  35000/36257]  P=0.259  R=0.195  F1=0.211  BLEU=0.128  ok=34847 err=52  791/s  ETA 0.0min
+  [  36000/36257]  P=0.258  R=0.194  F1=0.211  BLEU=0.128  ok=35844 err=53  794/s  ETA 0.0min
+  [  36257/36257]  P=0.258  R=0.194  F1=0.211  BLEU=0.128  ok=36100 err=53  786/s  ETA 0.0min
+
+Done in 0.8 min
+
+╔══════════════════════════════════════════════════════╗
+║         CFG Evaluation — Final Scores               ║
+╠══════════════════════════════════════════════════════╣
+  Contracts evaluated  : 36,100 / 36,257
+  Errors               : 53
+  Empty / no-func      : 104
+╠══════════════════════════════════════════════════════╣
+  Precision            : 0.2579
+  Recall               : 0.1941
+  F1 Score             : 0.2106
+  BLEU (combined)      : 0.1281
+  Count Recall         : 0.2351
+  Exact Match          : 5.51%
+╠══════════════════════════════════════════════════════╣
+  Output files:
+    /scratch/eh3115/Decompliler/Decompliler/results/cfg_eval/all_results.csv
+    /scratch/eh3115/Decompliler/Decompliler/results/cfg_eval/{version}_results.csv  (one per version)
+    /scratch/eh3115/Decompliler/Decompliler/results/cfg_eval/version_summary.csv
+╚══════════════════════════════════════════════════════╝
+
+=== Output ===
+-rw-r--r-- 1 eh3115 users 29M Jun 10 09:39 /scratch/eh3115/Decompliler/Decompliler/results/cfg_eval/0.8.0_results.csv
+Row count: 36258
+=== JOB END ===
+Wed Jun 10 09:39:01 +04 2026

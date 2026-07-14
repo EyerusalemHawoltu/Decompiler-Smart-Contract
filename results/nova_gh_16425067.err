@@ -1,0 +1,2 @@
+Loading module 'cuda/11.8.0'
+/var/spool/slurmd/job16425067/slurm_script: line 22: python: command not found
